@@ -363,7 +363,15 @@ async def chat_stream(request: ChatRequest):
         except Exception as e:
             yield f"data: [ERROR]{str(e)}[/ERROR]\n\n"
     
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return StreamingResponse(
+        generate(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
 
 
 @app.get("/stats", response_model=StatsResponse)
