@@ -1,0 +1,24 @@
+# Environment variables (NEVER commit API keys!)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+.venv/
+
+# ChromaDB data
+chroma_data/
+
+# Uploaded documents
+uploads/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store

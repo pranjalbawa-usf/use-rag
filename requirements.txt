@@ -1,0 +1,20 @@
+# FastAPI and server
+fastapi>=0.115.0
+uvicorn>=0.32.0
+python-multipart>=0.0.9
+
+# Vector database
+chromadb>=0.5.0
+
+# Embeddings (runs locally, no API needed)
+sentence-transformers>=3.0.0
+
+# USF API (HTTP requests)
+requests>=2.31.0
+
+# Document processing
+pypdf>=5.0.0
+python-dotenv>=1.0.0
+
+# Utilities
+pydantic>=2.9.0

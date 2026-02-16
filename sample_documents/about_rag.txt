@@ -1,0 +1,41 @@
+What is RAG (Retrieval-Augmented Generation)?
+
+RAG is a technique that combines the power of large language models (LLMs) with external knowledge retrieval. Instead of relying solely on what the model learned during training, RAG allows the model to access and use specific documents or data sources to answer questions.
+
+How RAG Works:
+
+1. Document Ingestion: First, you upload your documents (PDFs, text files, etc.). These documents are split into smaller chunks, typically a few hundred words each.
+
+2. Embedding Creation: Each chunk is converted into a numerical vector (called an embedding) using a neural network. These embeddings capture the semantic meaning of the text - similar concepts have similar vectors.
+
+3. Vector Storage: The embeddings are stored in a vector database (like ChromaDB, Pinecone, or Weaviate). This database is optimized for finding similar vectors quickly.
+
+4. Query Processing: When a user asks a question, the question is also converted to an embedding using the same model.
+
+5. Retrieval: The vector database finds the document chunks most similar to the question embedding. These are the chunks most likely to contain relevant information.
+
+6. Generation: The retrieved chunks are sent to the LLM along with the user's question. The LLM uses this context to generate an accurate, grounded answer.
+
+Benefits of RAG:
+
+- Accuracy: Answers are based on your specific documents, not just general training data
+- Up-to-date: You can add new documents anytime without retraining the model
+- Transparency: You can see which sources were used for each answer
+- Cost-effective: No need to fine-tune expensive models
+- Privacy: Your documents stay in your own system
+
+Common Use Cases:
+
+- Customer support chatbots that know your product documentation
+- Internal knowledge bases for employees
+- Research assistants that can search through papers
+- Legal document analysis
+- Medical information retrieval
+
+RAG vs Fine-tuning:
+
+Fine-tuning modifies the model's weights to learn new information. RAG keeps the model unchanged and provides information at query time. RAG is often preferred because:
+- It's cheaper and faster to implement
+- You can update knowledge without retraining
+- It's more transparent about sources
+- It works well for factual, document-based queries
