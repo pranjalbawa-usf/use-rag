@@ -29,6 +29,8 @@ from document_processor import DocumentProcessor
 from vector_store import VectorStore
 from rag_engine import RAGEngine
 from admin_routes import router as admin_router, init_admin
+from web_search_service import WebSearchService
+from query_analyzer import QueryAnalyzer, SearchIntent
 
 # Create necessary directories
 UPLOAD_DIR = Path("uploads")
@@ -46,6 +48,8 @@ print("=" * 50)
 document_processor = DocumentProcessor(chunk_size=350, chunk_overlap=35)
 vector_store = VectorStore(persist_directory="chroma_data")
 rag_engine = RAGEngine(vector_store)
+web_search = WebSearchService()
+query_analyzer = QueryAnalyzer()
 
 print("=" * 50)
 print("RAG System Ready!")
@@ -405,8 +409,13 @@ async def query_documents(request: ChatRequest):
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
     """
-    Streaming chat endpoint - returns response word-by-word for better UX.
+    Streaming chat endpoint with smart search - returns response word-by-word for better UX.
     Uses Server-Sent Events (SSE) format.
+    
+    Smart Search Logic:
+    - DOCUMENTS_ONLY: Questions about specific document content
+    - WEB_ONLY: General knowledge questions, definitions, how-tos
+    - BOTH: Questions that need document data + web explanation
     """
     print(f"\n{'='*50}")
     print(f"[STREAM] New question: {request.question[:100]}...")
@@ -415,22 +424,44 @@ async def chat_stream(request: ChatRequest):
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
     
+    # Analyze query intent
+    analysis = query_analyzer.analyze(request.question)
+    intent = analysis["intent"]
+    search_mode = intent.value
+    
+    print(f"  [SmartSearch] Intent: {search_mode}")
+    
     # Validate n_chunks
     n_chunks = max(1, min(request.n_chunks, 10))  # Clamp between 1 and 10
     
-    # Get relevant chunks first (this is fast)
-    # If filter_sources is provided, only search within those documents
-    chunks = vector_store.search(
-        request.question, 
-        n_results=n_chunks,
-        filter_sources=request.filter_sources,
-        upload_dir=str(UPLOAD_DIR)
-    )
+    chunks = []
+    web_results = []
     
-    if not chunks:
-        async def no_docs_response():
+    # Search documents if needed
+    if analysis["use_docs"]:
+        chunks = vector_store.search(
+            request.question, 
+            n_results=n_chunks,
+            filter_sources=request.filter_sources,
+            upload_dir=str(UPLOAD_DIR)
+        )
+        print(f"  [SmartSearch] Found {len(chunks)} document chunks")
+    
+    # Check if we should fallback to web
+    if analysis.get("fallback_to_web") and query_analyzer.should_fallback_to_web(chunks):
+        analysis["use_web"] = True
+        search_mode = "both"
+        print(f"  [SmartSearch] Low doc relevance, adding web search")
+    
+    # Search web if needed
+    if analysis["use_web"]:
+        web_results = web_search.search(request.question, num_results=5)
+        print(f"  [SmartSearch] Found {len(web_results)} web results")
+    
+    # Handle case where no results from either source
+    if not chunks and not web_results:
+        async def no_results_response():
             if request.filter_sources:
-                # Check which files are missing
                 missing_files = []
                 for source in request.filter_sources:
                     file_path = UPLOAD_DIR / source
@@ -446,16 +477,21 @@ async def chat_stream(request: ChatRequest):
                     msg += "\nPlease upload the documents again or clear this chat to start fresh."
                     yield f"data: {msg}\n\n"
                 else:
-                    yield "data: 📄 **No relevant information found**\n\nI couldn't find any relevant information in your uploaded documents to answer this question. Try rephrasing your question or uploading additional documents.\n\n"
+                    yield "data: 📄 **No relevant information found**\n\nI couldn't find any relevant information to answer this question.\n\n"
+            elif intent == SearchIntent.WEB_ONLY:
+                yield "data: 🌐 **No web results found**\n\nI couldn't find relevant information on the web for this query.\n\n"
             else:
                 yield "data: 📄 **No documents available**\n\nPlease upload some documents first so I can help answer your questions!\n\n"
+            yield f"data: [SEARCH_MODE]{search_mode}[/SEARCH_MODE]\n\n"
             yield "data: [DONE]\n\n"
-        return StreamingResponse(no_docs_response(), media_type="text/event-stream")
+        return StreamingResponse(no_results_response(), media_type="text/event-stream")
     
     # Get unique sources for the response
-    sources = list(set(chunk["source"] for chunk in chunks))
+    sources = list(set(chunk["source"] for chunk in chunks)) if chunks else []
+    web_sources = [{"title": r.get("title", ""), "url": r.get("url", "")} for r in web_results[:3]]
     
     import asyncio
+    import json
     
     async def generate():
         try:
@@ -469,7 +505,13 @@ async def chat_stream(request: ChatRequest):
             
             def run_sync_generator():
                 try:
-                    for chunk in rag_engine.usf_service.generate_answer_stream(request.question, chunks):
+                    # Use the smart search streaming method
+                    for chunk in rag_engine.usf_service.generate_answer_stream_smart(
+                        question=request.question,
+                        document_chunks=chunks,
+                        web_results=web_results,
+                        search_mode=search_mode
+                    ):
                         chunk_queue.put(chunk)
                     chunk_queue.put(None)  # Signal completion
                 except Exception as e:
@@ -498,8 +540,16 @@ async def chat_stream(request: ChatRequest):
             
             thread.join()
             
-            # Send sources at the end
-            yield f"data: [SOURCES]{','.join(sources)}[/SOURCES]\n\n"
+            # Send sources at the end (document sources)
+            if sources:
+                yield f"data: [SOURCES]{','.join(sources)}[/SOURCES]\n\n"
+            
+            # Send web sources
+            if web_sources:
+                yield f"data: [WEB_SOURCES]{json.dumps(web_sources)}[/WEB_SOURCES]\n\n"
+            
+            # Send search mode
+            yield f"data: [SEARCH_MODE]{search_mode}[/SEARCH_MODE]\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: [ERROR]{str(e)}[/ERROR]\n\n"

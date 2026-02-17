@@ -626,6 +626,8 @@ async function handleSendQuestion() {
     
     let fullResponse = '';
     let sources = [];
+    let webSources = [];
+    let searchMode = 'documents_only';
     
     // Get uploaded file names to filter search
     const uploadedFileNames = chatUploadedFiles.map(f => f.name);
@@ -664,6 +666,20 @@ async function handleSendQuestion() {
                         if (match) {
                             sources = match[1].split(',').filter(s => s.trim());
                         }
+                    } else if (data.startsWith('[WEB_SOURCES]')) {
+                        const match = data.match(/\[WEB_SOURCES\](.*?)\[\/WEB_SOURCES\]/);
+                        if (match) {
+                            try {
+                                webSources = JSON.parse(match[1]);
+                            } catch (e) {
+                                console.log('Failed to parse web sources');
+                            }
+                        }
+                    } else if (data.startsWith('[SEARCH_MODE]')) {
+                        const match = data.match(/\[SEARCH_MODE\](.*?)\[\/SEARCH_MODE\]/);
+                        if (match) {
+                            searchMode = match[1];
+                        }
                     } else if (data.startsWith('[ERROR]')) {
                         const match = data.match(/\[ERROR\](.*?)\[\/ERROR\]/);
                         throw new Error(match ? match[1] : 'Unknown error');
@@ -681,7 +697,7 @@ async function handleSendQuestion() {
             }
         }
         
-        finalizeStreamingMessage(streamingMessage, fullResponse, sources);
+        finalizeStreamingMessage(streamingMessage, fullResponse, sources, webSources, searchMode);
         
     } catch (error) {
         streamingMessage.remove();
@@ -757,18 +773,41 @@ function addStreamingMessage() {
     return messageDiv;
 }
 
-function finalizeStreamingMessage(messageDiv, content, sources) {
+function finalizeStreamingMessage(messageDiv, content, sources, webSources = [], searchMode = 'documents_only') {
     const contentEl = messageDiv.querySelector('.message-content');
     if (!contentEl) return;
     
     let sourcesHtml = '';
+    
+    // Document sources
     if (sources.length > 0) {
-        sourcesHtml = `
-            <div class="message-sources">
-                <span class="sources-label">📎 Sources:</span>
-                ${sources.map(s => `<span class="source-tag">${s}</span>`).join('')}
+        sourcesHtml += `
+            <div class="sources-section">
+                <span class="source-label">📄 Documents:</span>
+                ${sources.map(s => `<span class="source-tag doc">${s}</span>`).join(' ')}
             </div>
         `;
+    }
+    
+    // Web sources
+    if (webSources.length > 0) {
+        sourcesHtml += `
+            <div class="sources-section">
+                <span class="source-label">🌐 Web:</span>
+                ${webSources.map(s => `<a href="${s.url}" target="_blank" class="source-tag web">${s.title || 'Web Source'}</a>`).join(' ')}
+            </div>
+        `;
+    }
+    
+    // Search mode indicator
+    const modeText = {
+        'documents_only': '📄 From documents',
+        'web_only': '🌐 From web',
+        'both': '📄+🌐 From documents & web'
+    };
+    
+    if (searchMode && modeText[searchMode]) {
+        sourcesHtml += `<div class="search-mode-tag">${modeText[searchMode]}</div>`;
     }
     
     const streamingEl = contentEl.querySelector('.streaming-content');

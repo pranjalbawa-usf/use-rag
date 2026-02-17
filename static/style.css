@@ -1814,6 +1814,50 @@ body {
     .stats-section { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* Smart Search Source Styles */
+.sources-section {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #E5E7EB;
+    font-size: 12px;
+}
+
+.source-label {
+    color: #6B7280;
+    margin-right: 8px;
+}
+
+.source-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    margin: 2px;
+    text-decoration: none;
+}
+
+.source-tag.doc {
+    background: #EFF6FF;
+    color: #2563EB;
+}
+
+.source-tag.web {
+    background: #ECFDF5;
+    color: #059669;
+    cursor: pointer;
+}
+
+.source-tag.web:hover {
+    background: #D1FAE5;
+    text-decoration: underline;
+}
+
+.search-mode-tag {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #9CA3AF;
+}
+
 @media (max-width: 768px) {
     .sidebar { display: none; }
     .main-content { margin-left: 0; width: 100%; }

@@ -478,6 +478,141 @@ My question: {question}"""
         except requests.exceptions.RequestException as e:
             raise ValueError(f"USF API streaming failed: {str(e)}")
     
+    def generate_answer_stream_smart(
+        self,
+        question: str,
+        document_chunks: List[Dict] = None,
+        web_results: List[Dict] = None,
+        search_mode: str = "documents_only"
+    ):
+        """
+        Generate an answer with smart search - handles documents, web, or both.
+        
+        Args:
+            question: The user's question
+            document_chunks: List of relevant document chunks (optional)
+            web_results: List of web search results (optional)
+            search_mode: One of 'documents_only', 'web_only', 'both'
+            
+        Yields:
+            Text chunks as they are generated
+        """
+        # Build context based on search mode
+        context_parts = []
+        
+        if document_chunks:
+            doc_context = self._build_context(document_chunks)
+            context_parts.append(f"📄 FROM YOUR DOCUMENTS:\n{doc_context}")
+        
+        if web_results:
+            web_text = "\n\n".join([
+                f"From web ({r.get('url', 'unknown')}):\n{r.get('snippet', r.get('title', ''))}" 
+                for r in web_results[:5]
+            ])
+            context_parts.append(f"🌐 FROM WEB SEARCH:\n{web_text}")
+        
+        context = "\n\n---\n\n".join(context_parts) if context_parts else "No relevant information found."
+        
+        # Build appropriate system prompt based on search mode
+        base_prompt = self._build_system_prompt()
+        
+        if search_mode == "documents_only":
+            mode_rules = """
+IMPORTANT RULES FOR THIS RESPONSE:
+- Answer ONLY from the provided documents
+- If the information is not in the documents, say "I couldn't find this in your documents"
+- Quote or reference specific parts of the documents when possible
+- Do not make up information that isn't in the documents"""
+        elif search_mode == "web_only":
+            mode_rules = """
+IMPORTANT RULES FOR THIS RESPONSE:
+- Answer using the web search results provided
+- Cite the web sources when providing information
+- Be clear that this information comes from web search
+- If the web results don't contain relevant information, say so"""
+        else:  # both
+            mode_rules = """
+IMPORTANT RULES FOR THIS RESPONSE:
+- Use DOCUMENTS for specific data, numbers, names, and facts from the user's files
+- Use WEB for definitions, explanations, and general knowledge
+- Clearly distinguish between document sources and web sources
+- When combining both, explain how they relate to each other"""
+        
+        system_prompt = f"{base_prompt}\n\n{mode_rules}"
+        
+        user_message = f"""Here is the relevant information:
+
+{context}
+
+---
+
+My question: {question}"""
+        
+        # Prepare headers
+        headers = {
+            "x-api-key": self.api_key,
+            "Content-Type": "application/json"
+        }
+        
+        # Prepare payload with streaming enabled
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            "max_tokens": 1024,
+            "temperature": 0.5,
+            "stream": True,
+            "web_search": False  # We handle web search ourselves
+        }
+        
+        try:
+            print(f"  Streaming smart answer (mode: {search_mode})...")
+            response = self.session.post(
+                f"{self.base_url}/usf/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60,
+                stream=True
+            )
+            
+            if response.status_code != 200:
+                error_detail = response.text[:200] if response.text else "Unknown error"
+                raise ValueError(f"USF API error ({response.status_code}): {error_detail}")
+            
+            # Process streaming response
+            import json
+            buffer = ""
+            
+            for chunk in response.iter_content(chunk_size=1, decode_unicode=True):
+                if chunk:
+                    buffer += chunk
+                    
+                    while '\n' in buffer:
+                        line, buffer = buffer.split('\n', 1)
+                        line = line.strip()
+                        
+                        if line.startswith('data: '):
+                            data = line[6:]
+                            if data == '[DONE]':
+                                break
+                            try:
+                                chunk_data = json.loads(data)
+                                if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
+                                    delta = chunk_data['choices'][0].get('delta', {})
+                                    content = delta.get('content', '')
+                                    if content:
+                                        yield content
+                            except json.JSONDecodeError:
+                                if data and data != '[DONE]':
+                                    yield data
+                                
+            print(f"  ✓ Smart stream completed successfully")
+            
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"USF API streaming failed: {str(e)}")
+    
     def generate_with_history(
         self, 
         question: str, 
