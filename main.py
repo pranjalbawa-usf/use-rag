@@ -130,6 +130,12 @@ async def root():
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/login")
+async def login_page():
+    """Serve the login page."""
+    return FileResponse(STATIC_DIR / "login.html")
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint - useful for monitoring."""
