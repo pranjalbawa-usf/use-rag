@@ -181,7 +181,7 @@ async def process_single_file(file: UploadFile) -> FileUploadResult:
     ext = Path(filename).suffix.lower()
     is_image = ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']
     
-    # Process the document
+    # Process the document - all processing happens in background for instant uploads
     try:
         if is_image:
             # For images: Quick index with filename only, then process OCR in background
@@ -201,19 +201,21 @@ async def process_single_file(file: UploadFile) -> FileUploadResult:
                 chunks=1
             )
         else:
-            # For non-images: Process normally (fast)
-            chunks = await document_processor.process_document_async(str(file_path))
+            # For non-images: Quick index first, then process in background
+            quick_chunk = {
+                "content": f"[Document: {filename}] Processing...",
+                "source": filename,
+                "chunk_index": 0
+            }
+            await vector_store.add_documents_async([quick_chunk])
             
-            # Convert to dict format for vector store
-            chunk_dicts = [chunk.to_dict() for chunk in chunks]
-            
-            # Add to vector store (async)
-            await vector_store.add_documents_async(chunk_dicts)
+            # Start background document processing
+            asyncio.create_task(process_document_background(str(file_path), filename))
             
             return FileUploadResult(
                 filename=filename,
                 status='success',
-                chunks=len(chunks)
+                chunks=1
             )
     
     except Exception as e:
@@ -252,6 +254,33 @@ async def process_image_ocr_background(file_path: str, filename: str):
             
     except Exception as e:
         print(f"  [Background] OCR failed for {filename}: {e}")
+
+
+async def process_document_background(file_path: str, filename: str):
+    """
+    Background task to process document and update vector store.
+    This runs after the upload response is sent to the user.
+    """
+    try:
+        print(f"  [Background] Processing document {filename}...")
+        
+        # Process the document
+        chunks = await document_processor.process_document_async(file_path)
+        
+        if chunks:
+            # Delete the placeholder chunk
+            vector_store.delete_document(filename)
+            
+            # Add the real chunks
+            chunk_dicts = [chunk.to_dict() for chunk in chunks]
+            await vector_store.add_documents_async(chunk_dicts)
+            
+            print(f"  [Background] Document processed {filename}: {len(chunks)} chunks")
+        else:
+            print(f"  [Background] No content extracted from {filename}")
+            
+    except Exception as e:
+        print(f"  [Background] Document processing failed for {filename}: {e}")
 
 
 @app.post("/upload", response_model=DocumentInfo)
