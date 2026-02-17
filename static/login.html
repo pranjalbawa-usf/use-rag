@@ -493,15 +493,11 @@
                 localStorage.setItem('auth_token', data.token);
                 localStorage.setItem('user', JSON.stringify(data.user));
 
-                showSuccess('Login successful! Redirecting...');
-
-                setTimeout(() => {
-                    window.location.href = '/';
-                }, 1000);
+                // Redirect immediately
+                window.location.href = '/';
 
             } catch (error) {
                 showError(error.message);
-            } finally {
                 btn.disabled = false;
                 btn.textContent = 'Sign In';
             }
@@ -535,15 +531,11 @@
                 localStorage.setItem('auth_token', data.token);
                 localStorage.setItem('user', JSON.stringify(data.user));
 
-                showSuccess('Account created! Redirecting...');
-
-                setTimeout(() => {
-                    window.location.href = '/';
-                }, 1000);
+                // Redirect immediately
+                window.location.href = '/';
 
             } catch (error) {
                 showError(error.message);
-            } finally {
                 btn.disabled = false;
                 btn.textContent = 'Create Account';
             }
