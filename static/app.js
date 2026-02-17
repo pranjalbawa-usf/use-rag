@@ -37,11 +37,17 @@ const ALLOWED_TYPES = ['.txt', '.pdf', '.md', '.docx', '.xlsx', '.csv', '.png', 
 let isLoading = false;
 let currentPage = 'overview';
 let chatUploadedFiles = []; // Track files uploaded via chat
+let currentUser = null;
+let authToken = null;
+
+// Auth service URL
+const AUTH_URL = 'http://localhost:8001';
 
 // ============================================
 // Initialization
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
+    checkAuth();
     loadDocuments();
     loadStats();
     setupNavigation();
@@ -52,7 +58,67 @@ document.addEventListener('DOMContentLoaded', () => {
     setupPreviewModal();
     setupAdmin();
     setupDeleteAll();
+    setupUserProfile();
 });
+
+// ============================================
+// Authentication
+// ============================================
+function checkAuth() {
+    authToken = localStorage.getItem('auth_token');
+    const userStr = localStorage.getItem('user');
+    
+    if (authToken && userStr) {
+        try {
+            currentUser = JSON.parse(userStr);
+            updateUserDisplay();
+        } catch (e) {
+            logout();
+        }
+    }
+}
+
+function updateUserDisplay() {
+    const userNameEl = document.querySelector('.user-name');
+    const userEmailEl = document.querySelector('.user-email');
+    const loginBtn = document.querySelector('.login-btn');
+    const logoutBtn = document.querySelector('.logout-btn');
+    
+    if (currentUser) {
+        if (userNameEl) userNameEl.textContent = currentUser.name;
+        if (userEmailEl) userEmailEl.textContent = currentUser.email;
+        if (loginBtn) loginBtn.style.display = 'none';
+        if (logoutBtn) logoutBtn.style.display = 'flex';
+    } else {
+        if (userNameEl) userNameEl.textContent = 'Guest';
+        if (userEmailEl) userEmailEl.textContent = 'Not logged in';
+        if (loginBtn) loginBtn.style.display = 'flex';
+        if (logoutBtn) logoutBtn.style.display = 'none';
+    }
+}
+
+function logout() {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user');
+    currentUser = null;
+    authToken = null;
+    window.location.href = '/login';
+}
+
+function setupUserProfile() {
+    const logoutBtn = document.querySelector('.logout-btn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+    }
+}
+
+// Get auth headers for API calls
+function getAuthHeaders() {
+    if (authToken) {
+        return { 'Authorization': `Bearer ${authToken}` };
+    }
+    return {};
+}
 
 function setupDeleteAll() {
     const deleteAllBtn = document.getElementById('delete-all-docs');
@@ -227,6 +293,22 @@ async function uploadFile(file, index) {
             throw new Error('Upload failed');
         }
         
+        // Register document with auth service if logged in
+        if (authToken) {
+            try {
+                await fetch(`${AUTH_URL}/documents/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getAuthHeaders()
+                    },
+                    body: JSON.stringify({ filename: file.name })
+                });
+            } catch (e) {
+                console.log('Could not register document with auth service');
+            }
+        }
+        
         fillEl.style.width = '100%';
         fillEl.classList.add('success');
         statusEl.textContent = 'Complete';
@@ -247,12 +329,115 @@ async function uploadFile(file, index) {
 // ============================================
 async function loadDocuments() {
     try {
+        // If logged in, get user's documents from auth service
+        if (authToken && currentUser) {
+            try {
+                const isAdmin = currentUser.role === 'admin';
+                const endpoint = isAdmin ? `${AUTH_URL}/documents/all` : `${AUTH_URL}/documents/my`;
+                
+                const authResponse = await fetch(endpoint, {
+                    headers: getAuthHeaders()
+                });
+                
+                if (authResponse.ok) {
+                    const authData = await authResponse.json();
+                    
+                    if (isAdmin) {
+                        // Admin sees all documents grouped by user
+                        renderAdminDocumentList(authData);
+                        return;
+                    } else {
+                        // Regular user sees only their documents
+                        renderDocumentList(authData.documents || []);
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.log('Auth service unavailable, showing all documents');
+            }
+        }
+        
+        // Fallback: show all documents (guest mode or auth service down)
         const response = await fetch('/stats');
         const data = await response.json();
         renderDocumentList(data.documents);
     } catch (error) {
         console.error('Failed to load documents:', error);
     }
+}
+
+function renderAdminDocumentList(data) {
+    if (!documentList) return;
+    
+    const users = data.users || [];
+    
+    if (users.length === 0) {
+        if (emptyState) emptyState.style.display = 'block';
+        documentList.innerHTML = '';
+        return;
+    }
+    
+    if (emptyState) emptyState.style.display = 'none';
+    
+    let html = '';
+    
+    for (const user of users) {
+        html += `
+            <div class="user-documents-section">
+                <div class="user-header">
+                    <div class="user-avatar-small">${user.user_name ? user.user_name.charAt(0).toUpperCase() : 'U'}</div>
+                    <div class="user-info-small">
+                        <span class="user-name-small">${user.user_name || 'Unknown User'}</span>
+                        <span class="user-email-small">${user.user_email || ''}</span>
+                    </div>
+                    <span class="doc-count-badge">${user.count} docs</span>
+                </div>
+                <div class="user-docs-list">
+        `;
+        
+        for (const doc of user.documents) {
+            const ext = doc.split('.').pop().toLowerCase();
+            const iconClass = ext === 'pdf' ? 'pdf' : 
+                              ext === 'docx' ? 'docx' :
+                              ext === 'xlsx' ? 'xlsx' :
+                              ext === 'csv' ? 'csv' :
+                              ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext) ? 'image' :
+                              ext === 'md' ? 'md' : 'txt';
+            
+            html += `
+                <div class="document-card">
+                    <div class="document-icon ${iconClass}">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                    </div>
+                    <div class="document-info">
+                        <div class="document-name">${doc}</div>
+                        <div class="document-meta">${ext.toUpperCase()} file</div>
+                    </div>
+                    <div class="document-actions">
+                        <button class="preview-btn" onclick="previewDocument('${doc}')" title="Preview">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                        </button>
+                        <button class="delete-btn" onclick="deleteDocument('${doc}')" title="Delete">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        html += '</div></div>';
+    }
+    
+    documentList.innerHTML = html;
 }
 
 function renderDocumentList(documents) {

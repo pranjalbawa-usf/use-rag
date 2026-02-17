@@ -264,6 +264,75 @@ body {
     align-items: center;
 }
 
+/* ==================== ADMIN DOCUMENT VIEW ==================== */
+.user-documents-section {
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+}
+
+.user-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.user-avatar-small {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--primary-blue);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.user-info-small {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.user-name-small {
+    font-weight: 600;
+    color: var(--text-dark);
+    font-size: 14px;
+}
+
+.user-email-small {
+    font-size: 12px;
+    color: var(--text-gray);
+}
+
+.doc-count-badge {
+    background: var(--primary-blue-light);
+    color: var(--primary-blue);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.user-docs-list {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.user-docs-list .document-card {
+    margin-bottom: 0;
+}
+
 /* ==================== MAIN CONTENT ==================== */
 .main-content {
     margin-left: 260px;

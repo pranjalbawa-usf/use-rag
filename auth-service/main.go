@@ -62,12 +62,22 @@ type AuthResponse struct {
 	Message string      `json:"message"`
 }
 
+// UserDocument tracks document ownership
+type UserDocument struct {
+	Filename  string    `json:"filename"`
+	UserID    string    `json:"user_id"`
+	UploadedAt time.Time `json:"uploaded_at"`
+}
+
 // In-memory user store (replace with database in production)
 var (
-	users     = make(map[string]*User) // email -> user
-	usersByID = make(map[string]*User) // id -> user
-	userMutex sync.RWMutex
-	jwtSecret = []byte("your-secret-key-change-in-production")
+	users         = make(map[string]*User)         // email -> user
+	usersByID     = make(map[string]*User)         // id -> user
+	userDocuments = make(map[string][]string)      // user_id -> []filename
+	documentOwner = make(map[string]string)        // filename -> user_id
+	userMutex     sync.RWMutex
+	docMutex      sync.RWMutex
+	jwtSecret     = []byte("your-secret-key-change-in-production")
 )
 
 func init() {
@@ -142,6 +152,17 @@ func main() {
 		userRoutes.PUT("/me", updateProfile)
 		userRoutes.GET("/:id", getUserByID)
 		userRoutes.GET("/", listUsers) // Admin only
+	}
+
+	// Document ownership routes (protected)
+	docRoutes := r.Group("/documents")
+	docRoutes.Use(authMiddleware())
+	{
+		docRoutes.POST("/register", registerDocument)       // Register a document to user
+		docRoutes.DELETE("/:filename", unregisterDocument)  // Remove document ownership
+		docRoutes.GET("/my", getMyDocuments)                // Get current user's documents
+		docRoutes.GET("/user/:user_id", getUserDocuments)   // Admin: get specific user's docs
+		docRoutes.GET("/all", getAllDocuments)              // Admin: get all documents with owners
 	}
 
 	port := os.Getenv("AUTH_PORT")
@@ -417,4 +438,218 @@ func toProfile(user *User) UserProfile {
 		Role:      user.Role,
 		CreatedAt: user.CreatedAt,
 	}
+}
+
+// ============================================================================
+// Document Ownership Functions
+// ============================================================================
+
+// RegisterDocumentRequest for registering a document to a user
+type RegisterDocumentRequest struct {
+	Filename string `json:"filename" binding:"required"`
+}
+
+// registerDocument associates a document with the current user
+func registerDocument(c *gin.Context) {
+	var req RegisterDocumentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Filename is required"})
+		return
+	}
+
+	user, _ := c.Get("user")
+	currentUser := user.(*User)
+
+	docMutex.Lock()
+	defer docMutex.Unlock()
+
+	// Check if document is already owned
+	if existingOwner, exists := documentOwner[req.Filename]; exists {
+		if existingOwner != currentUser.ID {
+			c.JSON(http.StatusConflict, gin.H{"error": "Document already owned by another user"})
+			return
+		}
+		// Already owned by this user
+		c.JSON(http.StatusOK, gin.H{"message": "Document already registered", "filename": req.Filename})
+		return
+	}
+
+	// Register document to user
+	documentOwner[req.Filename] = currentUser.ID
+	userDocuments[currentUser.ID] = append(userDocuments[currentUser.ID], req.Filename)
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message":  "Document registered",
+		"filename": req.Filename,
+		"user_id":  currentUser.ID,
+	})
+}
+
+// unregisterDocument removes document ownership
+func unregisterDocument(c *gin.Context) {
+	filename := c.Param("filename")
+
+	user, _ := c.Get("user")
+	currentUser := user.(*User)
+
+	docMutex.Lock()
+	defer docMutex.Unlock()
+
+	// Check ownership
+	ownerID, exists := documentOwner[filename]
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Document not found"})
+		return
+	}
+
+	// Only owner or admin can delete
+	if ownerID != currentUser.ID && currentUser.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Not authorized to delete this document"})
+		return
+	}
+
+	// Remove from documentOwner
+	delete(documentOwner, filename)
+
+	// Remove from userDocuments
+	docs := userDocuments[ownerID]
+	for i, doc := range docs {
+		if doc == filename {
+			userDocuments[ownerID] = append(docs[:i], docs[i+1:]...)
+			break
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Document unregistered", "filename": filename})
+}
+
+// getMyDocuments returns documents owned by the current user
+func getMyDocuments(c *gin.Context) {
+	user, _ := c.Get("user")
+	currentUser := user.(*User)
+
+	docMutex.RLock()
+	docs := userDocuments[currentUser.ID]
+	docMutex.RUnlock()
+
+	if docs == nil {
+		docs = []string{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"user_id":   currentUser.ID,
+		"documents": docs,
+		"count":     len(docs),
+	})
+}
+
+// getUserDocuments returns documents for a specific user (admin only)
+func getUserDocuments(c *gin.Context) {
+	user, _ := c.Get("user")
+	currentUser := user.(*User)
+
+	if currentUser.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Admin access required"})
+		return
+	}
+
+	userID := c.Param("user_id")
+
+	docMutex.RLock()
+	docs := userDocuments[userID]
+	docMutex.RUnlock()
+
+	if docs == nil {
+		docs = []string{}
+	}
+
+	// Get user info
+	userMutex.RLock()
+	targetUser, exists := usersByID[userID]
+	userMutex.RUnlock()
+
+	var userName, userEmail string
+	if exists {
+		userName = targetUser.Name
+		userEmail = targetUser.Email
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"user_id":    userID,
+		"user_name":  userName,
+		"user_email": userEmail,
+		"documents":  docs,
+		"count":      len(docs),
+	})
+}
+
+// getAllDocuments returns all documents with their owners (admin only)
+func getAllDocuments(c *gin.Context) {
+	user, _ := c.Get("user")
+	currentUser := user.(*User)
+
+	if currentUser.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Admin access required"})
+		return
+	}
+
+	docMutex.RLock()
+	userMutex.RLock()
+	defer docMutex.RUnlock()
+	defer userMutex.RUnlock()
+
+	type DocumentWithOwner struct {
+		Filename  string `json:"filename"`
+		UserID    string `json:"user_id"`
+		UserName  string `json:"user_name"`
+		UserEmail string `json:"user_email"`
+	}
+
+	var allDocs []DocumentWithOwner
+	for filename, ownerID := range documentOwner {
+		doc := DocumentWithOwner{
+			Filename: filename,
+			UserID:   ownerID,
+		}
+		if owner, exists := usersByID[ownerID]; exists {
+			doc.UserName = owner.Name
+			doc.UserEmail = owner.Email
+		}
+		allDocs = append(allDocs, doc)
+	}
+
+	// Group by user
+	docsByUser := make(map[string][]string)
+	for filename, ownerID := range documentOwner {
+		docsByUser[ownerID] = append(docsByUser[ownerID], filename)
+	}
+
+	type UserWithDocs struct {
+		UserID    string   `json:"user_id"`
+		UserName  string   `json:"user_name"`
+		UserEmail string   `json:"user_email"`
+		Documents []string `json:"documents"`
+		Count     int      `json:"count"`
+	}
+
+	var usersList []UserWithDocs
+	for userID, docs := range docsByUser {
+		uwd := UserWithDocs{
+			UserID:    userID,
+			Documents: docs,
+			Count:     len(docs),
+		}
+		if owner, exists := usersByID[userID]; exists {
+			uwd.UserName = owner.Name
+			uwd.UserEmail = owner.Email
+		}
+		usersList = append(usersList, uwd)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total_documents": len(documentOwner),
+		"total_users":     len(docsByUser),
+		"users":           usersList,
+		"all_documents":   allDocs,
+	})
 }
