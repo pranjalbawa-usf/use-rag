@@ -140,6 +140,9 @@ async def process_single_file(file: UploadFile) -> FileUploadResult:
     """
     Process a single file upload. Used by both single and multi-upload endpoints.
     Returns FileUploadResult with status.
+    
+    For images: Uses quick local processing first, then enhances with Vision API in background.
+    For other files: Processes normally (fast for text/PDF).
     """
     filename = file.filename
     
@@ -168,22 +171,44 @@ async def process_single_file(file: UploadFile) -> FileUploadResult:
             error=f"Failed to save file: {str(e)}"
         )
     
+    # Check if it's an image - use quick indexing first
+    ext = Path(filename).suffix.lower()
+    is_image = ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']
+    
     # Process the document
     try:
-        # Use async processing for speed
-        chunks = await document_processor.process_document_async(str(file_path))
-        
-        # Convert to dict format for vector store
-        chunk_dicts = [chunk.to_dict() for chunk in chunks]
-        
-        # Add to vector store (async)
-        await vector_store.add_documents_async(chunk_dicts)
-        
-        return FileUploadResult(
-            filename=filename,
-            status='success',
-            chunks=len(chunks)
-        )
+        if is_image:
+            # For images: Quick index with filename only, then process OCR in background
+            quick_chunk = {
+                "content": f"[Image: {filename}] Processing...",
+                "source": filename,
+                "chunk_index": 0
+            }
+            await vector_store.add_documents_async([quick_chunk])
+            
+            # Start background OCR processing
+            asyncio.create_task(process_image_ocr_background(str(file_path), filename))
+            
+            return FileUploadResult(
+                filename=filename,
+                status='success',
+                chunks=1
+            )
+        else:
+            # For non-images: Process normally (fast)
+            chunks = await document_processor.process_document_async(str(file_path))
+            
+            # Convert to dict format for vector store
+            chunk_dicts = [chunk.to_dict() for chunk in chunks]
+            
+            # Add to vector store (async)
+            await vector_store.add_documents_async(chunk_dicts)
+            
+            return FileUploadResult(
+                filename=filename,
+                status='success',
+                chunks=len(chunks)
+            )
     
     except Exception as e:
         # Clean up the file if processing failed
@@ -194,6 +219,33 @@ async def process_single_file(file: UploadFile) -> FileUploadResult:
             status='error',
             error=f"Failed to process: {str(e)}"
         )
+
+
+async def process_image_ocr_background(file_path: str, filename: str):
+    """
+    Background task to process image OCR and update vector store.
+    This runs after the upload response is sent to the user.
+    """
+    try:
+        print(f"  [Background] Starting OCR for {filename}...")
+        
+        # Process the image with full OCR
+        chunks = await document_processor.process_document_async(file_path)
+        
+        if chunks:
+            # Delete the placeholder chunk
+            vector_store.delete_document(filename)
+            
+            # Add the real chunks
+            chunk_dicts = [chunk.to_dict() for chunk in chunks]
+            await vector_store.add_documents_async(chunk_dicts)
+            
+            print(f"  [Background] OCR complete for {filename}: {len(chunks)} chunks")
+        else:
+            print(f"  [Background] No text extracted from {filename}")
+            
+    except Exception as e:
+        print(f"  [Background] OCR failed for {filename}: {e}")
 
 
 @app.post("/upload", response_model=DocumentInfo)
@@ -343,9 +395,25 @@ async def chat_stream(request: ChatRequest):
     if not chunks:
         async def no_docs_response():
             if request.filter_sources:
-                yield "data: The document(s) you uploaded no longer exist on the server. Please remove them from the chat and upload fresh copies.\n\n"
+                # Check which files are missing
+                missing_files = []
+                for source in request.filter_sources:
+                    file_path = UPLOAD_DIR / source
+                    if not file_path.exists():
+                        missing_files.append(source)
+                
+                if missing_files:
+                    msg = f"📄 **No reference documents found**\n\nThe document(s) you're asking about have been deleted from the system:\n"
+                    for f in missing_files[:3]:
+                        msg += f"- {f}\n"
+                    if len(missing_files) > 3:
+                        msg += f"- ...and {len(missing_files) - 3} more\n"
+                    msg += "\nPlease upload the documents again or clear this chat to start fresh."
+                    yield f"data: {msg}\n\n"
+                else:
+                    yield "data: 📄 **No relevant information found**\n\nI couldn't find any relevant information in your uploaded documents to answer this question. Try rephrasing your question or uploading additional documents.\n\n"
             else:
-                yield "data: I don't have any documents to search through yet. Please upload some documents first!\n\n"
+                yield "data: 📄 **No documents available**\n\nPlease upload some documents first so I can help answer your questions!\n\n"
             yield "data: [DONE]\n\n"
         return StreamingResponse(no_docs_response(), media_type="text/event-stream")
     
@@ -564,11 +632,15 @@ async def get_document_file(name: str):
     )
 
 
+# Cache for JSON extraction results
+json_cache = {}
+
 @app.get("/json")
 async def get_document_json(name: str):
     """
     Extract structured JSON from a document using Vision AI OCR.
     Use query parameter: /json?name=filename.pdf
+    Results are cached to avoid re-processing.
     """
     from urllib.parse import unquote
     import unicodedata
@@ -590,12 +662,24 @@ async def get_document_json(name: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Document not found")
     
+    # Check cache first - use file path and modification time as key
+    file_mtime = file_path.stat().st_mtime
+    cache_key = f"{filename}_{file_mtime}"
+    
+    if cache_key in json_cache:
+        print(f"  [JSON] Cache hit for {filename}")
+        return json_cache[cache_key]
+    
     ext = file_path.suffix.lower()
+    
+    print(f"  [JSON] Extracting from {filename}...")
     
     # For images, extract JSON directly
     if ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']:
         json_data = ocr_service.extract_structured_json(str(file_path))
-        return {"filename": filename, "type": "image", "data": json_data}
+        result = {"filename": filename, "type": "image", "data": json_data}
+        json_cache[cache_key] = result  # Cache the result
+        return result
     
     # For PDFs, convert first page to image and extract
     elif ext == '.pdf':
@@ -622,7 +706,9 @@ async def get_document_json(name: str):
             Path(tmp_path).unlink()
             doc.close()
             
-            return {"filename": filename, "type": "pdf", "data": json_data}
+            result = {"filename": filename, "type": "pdf", "data": json_data}
+            json_cache[cache_key] = result  # Cache the result
+            return result
         except Exception as e:
             return {"filename": filename, "type": "pdf", "data": {"error": str(e)}}
     
