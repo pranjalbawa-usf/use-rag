@@ -1142,13 +1142,56 @@ async function loadDocumentJson(filename) {
         }
         
         const data = await response.json();
-        jsonContent.textContent = JSON.stringify(data.data, null, 2);
+        // Filter out empty fields before displaying
+        const filteredData = filterEmptyFields(data.data);
+        jsonContent.textContent = JSON.stringify(filteredData, null, 2);
         
     } catch (error) {
         jsonContent.textContent = JSON.stringify({ error: error.message }, null, 2);
     } finally {
         if (jsonLoading) jsonLoading.classList.add('hidden');
     }
+}
+
+// Filter out empty, null, undefined, or placeholder values from JSON
+function filterEmptyFields(obj) {
+    if (obj === null || obj === undefined) return null;
+    
+    if (Array.isArray(obj)) {
+        const filtered = obj
+            .map(item => filterEmptyFields(item))
+            .filter(item => !isEmptyValue(item));
+        return filtered.length > 0 ? filtered : null;
+    }
+    
+    if (typeof obj === 'object') {
+        const result = {};
+        for (const [key, value] of Object.entries(obj)) {
+            const filteredValue = filterEmptyFields(value);
+            if (!isEmptyValue(filteredValue)) {
+                result[key] = filteredValue;
+            }
+        }
+        return Object.keys(result).length > 0 ? result : null;
+    }
+    
+    return obj;
+}
+
+// Check if a value is considered "empty"
+function isEmptyValue(value) {
+    if (value === null || value === undefined) return true;
+    if (value === '') return true;
+    if (value === '-') return true;
+    if (value === '--') return true;
+    if (value === 'N/A' || value === 'n/a') return true;
+    if (value === 'null' || value === 'undefined') return true;
+    if (value === 'None' || value === 'none') return true;
+    if (typeof value === 'string' && value.trim() === '') return true;
+    if (typeof value === 'string' && value.trim() === '-') return true;
+    if (Array.isArray(value) && value.length === 0) return true;
+    if (typeof value === 'object' && value !== null && Object.keys(value).length === 0) return true;
+    return false;
 }
 
 function closePreviewModal() {
