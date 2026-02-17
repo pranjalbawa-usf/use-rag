@@ -1133,7 +1133,7 @@ async function loadDocumentJson(filename) {
     
     if (!jsonContent) return;
     
-    jsonContent.textContent = '';
+    jsonContent.innerHTML = '';
     if (jsonLoading) jsonLoading.classList.remove('hidden');
     
     try {
@@ -1147,13 +1147,58 @@ async function loadDocumentJson(filename) {
         const data = await response.json();
         // Filter out empty fields before displaying
         const filteredData = filterEmptyFields(data.data);
-        jsonContent.textContent = JSON.stringify(filteredData, null, 2);
+        // Render as formatted HTML
+        jsonContent.innerHTML = renderJsonAsHtml(filteredData);
         
     } catch (error) {
         jsonContent.textContent = JSON.stringify({ error: error.message }, null, 2);
     } finally {
         if (jsonLoading) jsonLoading.classList.add('hidden');
     }
+}
+
+// Render JSON as formatted HTML with proper styling
+function renderJsonAsHtml(obj, level = 0) {
+    if (obj === null || obj === undefined) return '';
+    
+    if (typeof obj !== 'object') {
+        return `<span class="json-value">${escapeHtml(String(obj))}</span>`;
+    }
+    
+    if (Array.isArray(obj)) {
+        if (obj.length === 0) return '';
+        return obj.map(item => renderJsonAsHtml(item, level)).join('');
+    }
+    
+    let html = '';
+    for (const [key, value] of Object.entries(obj)) {
+        // Skip if value is empty after filtering
+        if (isEmptyValue(value)) continue;
+        
+        const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        
+        if (typeof value === 'object' && value !== null) {
+            const nestedHtml = renderJsonAsHtml(value, level + 1);
+            if (nestedHtml.trim()) {
+                html += `<div class="json-field" style="margin-left: ${level * 16}px;">
+                    <div class="json-key">${escapeHtml(formattedKey)}:</div>
+                    <div class="json-nested">${nestedHtml}</div>
+                </div>`;
+            }
+        } else {
+            html += `<div class="json-field" style="margin-left: ${level * 16}px;">
+                <div class="json-key">${escapeHtml(formattedKey)}:</div>
+                <div class="json-value">${escapeHtml(String(value))}</div>
+            </div>`;
+        }
+    }
+    return html;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 // Filter out empty, null, undefined, or placeholder values from JSON

@@ -1720,6 +1720,41 @@ body {
     border-color: var(--border-medium);
 }
 
+/* JSON Formatted Display */
+.json-field {
+    margin-bottom: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.json-field:last-child {
+    border-bottom: none;
+}
+
+.json-key {
+    font-weight: 600;
+    color: var(--primary-blue);
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+.json-value {
+    color: var(--text-dark);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.json-nested {
+    padding-left: 16px;
+    margin-top: 8px;
+}
+
+.json-content {
+    font-family: inherit;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
 .btn-warning {
     display: flex;
     align-items: center;
