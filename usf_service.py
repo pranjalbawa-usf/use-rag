@@ -309,26 +309,34 @@ My question: {question}"""
                 error_detail = response.text[:200] if response.text else "Unknown error"
                 raise ValueError(f"USF API error ({response.status_code}): {error_detail}")
             
-            # Process streaming response
-            for line in response.iter_lines():
-                if line:
-                    line_text = line.decode('utf-8')
-                    if line_text.startswith('data: '):
-                        data = line_text[6:]  # Remove 'data: ' prefix
-                        if data == '[DONE]':
-                            break
-                        try:
-                            import json
-                            chunk_data = json.loads(data)
-                            if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
-                                delta = chunk_data['choices'][0].get('delta', {})
-                                content = delta.get('content', '')
-                                if content:
-                                    yield content
-                        except json.JSONDecodeError:
-                            # If not JSON, yield the raw text
-                            if data and data != '[DONE]':
-                                yield data
+            # Process streaming response with immediate flushing
+            import json
+            buffer = ""
+            
+            for chunk in response.iter_content(chunk_size=1, decode_unicode=True):
+                if chunk:
+                    buffer += chunk
+                    
+                    # Process complete lines
+                    while '\n' in buffer:
+                        line, buffer = buffer.split('\n', 1)
+                        line = line.strip()
+                        
+                        if line.startswith('data: '):
+                            data = line[6:]  # Remove 'data: ' prefix
+                            if data == '[DONE]':
+                                break
+                            try:
+                                chunk_data = json.loads(data)
+                                if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
+                                    delta = chunk_data['choices'][0].get('delta', {})
+                                    content = delta.get('content', '')
+                                    if content:
+                                        yield content
+                            except json.JSONDecodeError:
+                                # If not JSON, yield the raw text
+                                if data and data != '[DONE]':
+                                    yield data
                                 
             print(f"  ✓ Stream completed successfully")
             

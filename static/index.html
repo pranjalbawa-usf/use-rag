@@ -253,15 +253,24 @@
             <div class="page" id="page-documents">
                 <div class="page-header">
                     <h2 class="page-title">Your Documents</h2>
-                    <label class="btn-primary upload-dropzone" for="file-input-docs" id="upload-area">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="17 8 12 3 7 8"/>
-                            <line x1="12" y1="3" x2="12" y2="15"/>
-                        </svg>
-                        Upload Files
-                        <input type="file" id="file-input-docs" accept=".txt,.pdf,.md,.docx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.bmp,.webp" multiple hidden>
-                    </label>
+                    <div class="page-header-actions">
+                        <button class="btn-danger" id="delete-all-docs" title="Delete All Documents">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                            Delete All
+                        </button>
+                        <label class="btn-primary upload-dropzone" for="file-input-docs" id="upload-area">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                            Upload Files
+                            <input type="file" id="file-input-docs" accept=".txt,.pdf,.md,.docx,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.bmp,.webp" multiple hidden>
+                        </label>
+                    </div>
                 </div>
 
                 <!-- Upload Progress -->
@@ -519,6 +528,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=17"></script>
+    <script src="/static/app.js?v=22"></script>
 </body>
 </html>

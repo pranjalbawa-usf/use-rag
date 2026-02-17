@@ -352,11 +352,49 @@ async def chat_stream(request: ChatRequest):
     # Get unique sources for the response
     sources = list(set(chunk["source"] for chunk in chunks))
     
+    import asyncio
+    
     async def generate():
         try:
-            # Stream from USF API
-            for chunk in rag_engine.usf_service.generate_answer_stream(request.question, chunks):
-                yield f"data: {chunk}\n\n"
+            # Run sync generator in thread pool to avoid blocking
+            loop = asyncio.get_event_loop()
+            
+            # Create a queue to pass chunks from sync to async
+            import queue
+            chunk_queue = queue.Queue()
+            done_event = asyncio.Event()
+            
+            def run_sync_generator():
+                try:
+                    for chunk in rag_engine.usf_service.generate_answer_stream(request.question, chunks):
+                        chunk_queue.put(chunk)
+                    chunk_queue.put(None)  # Signal completion
+                except Exception as e:
+                    chunk_queue.put(f"[ERROR]{str(e)}[/ERROR]")
+                    chunk_queue.put(None)
+            
+            # Start the sync generator in a thread
+            import threading
+            thread = threading.Thread(target=run_sync_generator)
+            thread.start()
+            
+            # Yield chunks as they arrive
+            while True:
+                # Check queue with small timeout to allow async yielding
+                try:
+                    chunk = chunk_queue.get(timeout=0.01)
+                    if chunk is None:
+                        break
+                    if chunk.startswith("[ERROR]"):
+                        yield f"data: {chunk}\n\n"
+                        break
+                    yield f"data: {chunk}\n\n"
+                except queue.Empty:
+                    await asyncio.sleep(0.01)
+                    continue
+            
+            thread.join()
+            
             # Send sources at the end
             yield f"data: [SOURCES]{','.join(sources)}[/SOURCES]\n\n"
             yield "data: [DONE]\n\n"
@@ -384,6 +422,43 @@ async def get_stats():
         total_chunks=stats["total_chunks"],
         documents=documents
     )
+
+
+@app.delete("/documents/all")
+async def delete_all_documents():
+    """
+    Delete ALL documents from the system.
+    
+    This removes:
+    1. All files from uploads directory
+    2. All chunks from the vector store
+    """
+    documents = vector_store.list_documents()
+    total_chunks_deleted = 0
+    files_deleted = 0
+    
+    for doc in documents:
+        # Delete from vector store
+        chunks_deleted = vector_store.delete_document(doc)
+        total_chunks_deleted += chunks_deleted
+        
+        # Delete the file if it exists
+        file_path = UPLOAD_DIR / doc
+        if file_path.exists():
+            file_path.unlink()
+            files_deleted += 1
+    
+    # Also delete any files in uploads that aren't in vector store
+    for file_path in UPLOAD_DIR.iterdir():
+        if file_path.is_file() and file_path.name not in documents:
+            file_path.unlink()
+            files_deleted += 1
+    
+    return {
+        "documents_deleted": len(documents),
+        "files_deleted": files_deleted,
+        "chunks_deleted": total_chunks_deleted
+    }
 
 
 @app.delete("/document/{filename}")

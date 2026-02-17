@@ -234,6 +234,36 @@ body {
 
 .logout-btn:hover { background: #FECACA; }
 
+/* Delete All Button */
+.btn-danger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--danger-red);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-danger:hover {
+    background: #DC2626;
+}
+
+.btn-danger svg {
+    stroke: white;
+}
+
+.page-header-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
 /* ==================== MAIN CONTENT ==================== */
 .main-content {
     margin-left: 260px;

@@ -51,7 +51,15 @@ document.addEventListener('DOMContentLoaded', () => {
     setupChatFileUpload();
     setupPreviewModal();
     setupAdmin();
+    setupDeleteAll();
 });
+
+function setupDeleteAll() {
+    const deleteAllBtn = document.getElementById('delete-all-docs');
+    if (deleteAllBtn) {
+        deleteAllBtn.addEventListener('click', deleteAllDocuments);
+    }
+}
 
 // ============================================
 // Page Navigation
@@ -318,6 +326,28 @@ async function deleteDocument(filename) {
     }
 }
 
+async function deleteAllDocuments() {
+    const docCount = document.getElementById('doc-count')?.textContent || '0';
+    if (!confirm(`Delete ALL ${docCount} documents? This cannot be undone.`)) return;
+    
+    try {
+        const response = await fetch('/documents/all', {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            showToast(`Deleted ${data.files_deleted} documents`, 'success');
+            await loadDocuments();
+            await loadStats();
+        } else {
+            throw new Error('Delete all failed');
+        }
+    } catch (error) {
+        showToast('Failed to delete documents', 'error');
+    }
+}
+
 // ============================================
 // Stats
 // ============================================
@@ -454,6 +484,7 @@ async function handleSendQuestion() {
                         const match = data.match(/\[ERROR\](.*?)\[\/ERROR\]/);
                         throw new Error(match ? match[1] : 'Unknown error');
                     } else {
+                        // Display immediately as chunks arrive
                         fullResponse += data;
                         if (contentEl) {
                             contentEl.innerHTML = formatMessage(fullResponse);
@@ -875,32 +906,33 @@ async function previewDocument(filename) {
     
     const ext = filename.split('.').pop().toLowerCase();
     
-    // First check if document exists
     try {
-        const checkResponse = await fetch(`/content?name=${encodeURIComponent(filename)}`);
-        
-        if (!checkResponse.ok) {
-            const errorData = await checkResponse.json();
-            previewContent.textContent = `Document not found: "${filename}"\n\nThis file may have been deleted or renamed.\n\nPlease upload the document again.`;
-            return;
-        }
-        
-        const data = await checkResponse.json();
-        
-        // For PDFs, show in iframe
+        // For PDFs, show directly in iframe (fast)
         if (ext === 'pdf') {
             previewContent.classList.add('hidden');
             if (previewIframe) {
                 previewIframe.classList.remove('hidden');
                 previewIframe.src = `/file?name=${encodeURIComponent(filename)}`;
             }
-        } else if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext)) {
-            // For images, show the image directly
-            previewContent.innerHTML = `<img src="/file?name=${encodeURIComponent(filename)}" alt="${filename}" style="max-width: 100%; max-height: 70vh; border-radius: 8px;">`;
-        } else {
-            // For text files, show content
-            previewContent.textContent = data.content || 'No content available';
+            return;
         }
+        
+        // For images, show directly (fast - no content fetch needed)
+        if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'].includes(ext)) {
+            previewContent.innerHTML = `<img src="/file?name=${encodeURIComponent(filename)}" alt="${filename}" style="max-width: 100%; max-height: 70vh; border-radius: 8px;" onerror="this.parentElement.textContent='Failed to load image'">`;
+            return;
+        }
+        
+        // For text files, fetch content
+        const checkResponse = await fetch(`/content?name=${encodeURIComponent(filename)}`);
+        
+        if (!checkResponse.ok) {
+            previewContent.textContent = `Document not found: "${filename}"\n\nThis file may have been deleted or renamed.\n\nPlease upload the document again.`;
+            return;
+        }
+        
+        const data = await checkResponse.json();
+        previewContent.textContent = data.content || 'No content available';
         
     } catch (error) {
         previewContent.textContent = `Error loading document: ${error.message}`;
