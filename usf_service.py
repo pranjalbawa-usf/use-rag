@@ -116,37 +116,119 @@ NEVER use generic terms when the document uses specific terminology.
 
 ABBREVIATION UNDERSTANDING:
 When users use common abbreviations, understand them automatically:
+
+**Document/File Types:**
 - **ss** = screenshot
 - **img** = image
 - **doc** = document
 - **pdf** = PDF file
 - **pic** = picture
-- **info** = information
-- **desc** = description
-- **amt** = amount
-- **qty** = quantity
+- **ppt** = PowerPoint/presentation
+- **xls** = Excel/spreadsheet
+
+**Business/Finance:**
 - **inv** = invoice
 - **po** = purchase order
-- **ref** = reference
+- **so** = sales order
+- **amt** = amount
+- **qty** = quantity
+- **txn** = transaction
+- **acct** = account
+- **bal** = balance
+- **pmt** = payment
+- **rcpt** = receipt
+- **vat** = value added tax
+- **gst** = goods and services tax
+- **trn** = tax registration number
+- **fy** = fiscal year
+- **ytd** = year to date
+- **mtd** = month to date
+- **roi** = return on investment
+- **p&l** = profit and loss
+- **cogs** = cost of goods sold
+
+**Contact/Address:**
 - **addr** = address
 - **tel** = telephone
+- **ph** = phone
+- **mob** = mobile
+- **ext** = extension
+- **fax** = facsimile
+- **hq** = headquarters
+- **loc** = location
+
+**People/Roles:**
+- **mgr** = manager
+- **emp** = employee
+- **cust** = customer
+- **vend** = vendor
+- **sup** = supplier
+- **hr** = human resources
+- **ceo** = chief executive officer
+- **cfo** = chief financial officer
+- **cto** = chief technology officer
+- **dir** = director
+- **exec** = executive
+- **rep** = representative
+- **asst** = assistant
+
+**General:**
+- **info** = information
+- **desc** = description
+- **ref** = reference
 - **no** or **num** = number
+- **id** = identifier
 - **yr** = year
 - **mo** = month
+- **wk** = week
 - **approx** = approximately
 - **est** = estimated
+- **avg** = average
+- **min** = minimum
+- **max** = maximum
+- **qty** = quantity
+- **pcs** = pieces
+- **ea** = each
+- **govt** = government
+- **dept** = department
+- **org** = organization
+- **co** = company
+- **corp** = corporation
+- **llc** = limited liability company
+- **ltd** = limited
+- **inc** = incorporated
+
+**Communication:**
 - **asap** = as soon as possible
 - **fyi** = for your information
 - **re** = regarding
 - **w/** = with
 - **w/o** = without
 - **b/w** = between
-- **govt** = government
-- **dept** = department
-- **mgr** = manager
-- **emp** = employee
-- **acct** = account
-- **txn** = transaction
+- **attn** = attention
+- **cc** = carbon copy
+- **bcc** = blind carbon copy
+- **eta** = estimated time of arrival
+- **tbd** = to be determined
+- **tba** = to be announced
+- **n/a** = not applicable
+- **misc** = miscellaneous
+- **aka** = also known as
+- **etc** = et cetera
+- **eg** or **e.g.** = for example
+- **ie** or **i.e.** = that is
+
+**Status/Actions:**
+- **pend** = pending
+- **appr** = approved
+- **rej** = rejected
+- **canc** = cancelled
+- **comp** = completed
+- **conf** = confirmed
+- **req** = required/request
+- **rcvd** = received
+- **sent** = sent
+- **proc** = processing
 
 Interpret these abbreviations naturally in context without asking for clarification.
 
