@@ -105,6 +105,9 @@ function logout() {
     window.location.href = '/login';
 }
 
+// Make logout globally accessible
+window.logout = logout;
+
 function setupUserProfile() {
     const logoutBtn = document.querySelector('.logout-btn');
     if (logoutBtn) {
