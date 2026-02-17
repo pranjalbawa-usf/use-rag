@@ -296,20 +296,16 @@ async function uploadFile(file, index) {
             throw new Error('Upload failed');
         }
         
-        // Register document with auth service if logged in
+        // Register document with auth service if logged in (silent - no errors shown)
         if (authToken) {
-            try {
-                await fetch(`${AUTH_URL}/documents/register`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...getAuthHeaders()
-                    },
-                    body: JSON.stringify({ filename: file.name })
-                });
-            } catch (e) {
-                console.log('Could not register document with auth service');
-            }
+            fetch(`${AUTH_URL}/documents/register`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...getAuthHeaders()
+                },
+                body: JSON.stringify({ filename: file.name })
+            }).catch(() => {});
         }
         
         fillEl.style.width = '100%';
@@ -939,6 +935,18 @@ async function handleChatFileUpload(e) {
             });
             
             if (!response.ok) throw new Error('Upload failed');
+            
+            // Register document with auth service if logged in (silent - no errors shown)
+            if (authToken) {
+                fetch(`${AUTH_URL}/documents/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getAuthHeaders()
+                    },
+                    body: JSON.stringify({ filename: file.name })
+                }).catch(() => {});
+            }
             
             // Update status to success and add preview button
             const statusEl = fileItem.querySelector('.file-status');
