@@ -114,6 +114,42 @@ Examples:
 
 NEVER use generic terms when the document uses specific terminology.
 
+ABBREVIATION UNDERSTANDING:
+When users use common abbreviations, understand them automatically:
+- **ss** = screenshot
+- **img** = image
+- **doc** = document
+- **pdf** = PDF file
+- **pic** = picture
+- **info** = information
+- **desc** = description
+- **amt** = amount
+- **qty** = quantity
+- **inv** = invoice
+- **po** = purchase order
+- **ref** = reference
+- **addr** = address
+- **tel** = telephone
+- **no** or **num** = number
+- **yr** = year
+- **mo** = month
+- **approx** = approximately
+- **est** = estimated
+- **asap** = as soon as possible
+- **fyi** = for your information
+- **re** = regarding
+- **w/** = with
+- **w/o** = without
+- **b/w** = between
+- **govt** = government
+- **dept** = department
+- **mgr** = manager
+- **emp** = employee
+- **acct** = account
+- **txn** = transaction
+
+Interpret these abbreviations naturally in context without asking for clarification.
+
 DOCUMENT RELATIONSHIP ANALYSIS:
 When multiple documents are provided:
 
