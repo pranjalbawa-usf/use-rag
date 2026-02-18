@@ -114,12 +114,16 @@ class QueryAnalyzer:
     
     # COMPARISON patterns - "Are you better than ChatGPT?"
     COMPARISON_PATTERNS = [
-        r'\b(are|r)\s+you\s+(better|smarter|faster|worse)\s+than\s+(chatgpt|claude|gemini|gpt|bard|copilot)',
-        r'\b(chatgpt|claude|gemini|gpt|bard|copilot)\s+(vs|versus|or)\s+(you|u)',
-        r'\b(you|u)\s+(vs|versus|or)\s+(chatgpt|claude|gemini|gpt|bard|copilot)',
-        r'\bhow\s+do\s+you\s+compare\s+to\s+(chatgpt|claude|gemini|gpt)',
-        r'\bwhich\s+is\s+better.*(you|chatgpt|claude|gemini)',
-        r'\bare\s+you\s+the\s+best\s+(ai|assistant|chatbot)',
+        r'\b(are|r)\s+(you|u)\s+(better|smarter|faster|worse)\s+than\s+(chatgpt|claude|claud|gemini|gpt|bard|copilot)',
+        r'\b(chatgpt|claude|claud|gemini|gpt|bard|copilot)\s+(vs|versus|or)\s+(you|u)',
+        r'\b(you|u)\s+(vs|versus|or)\s+(chatgpt|claude|claud|gemini|gpt|bard|copilot)',
+        r'\bhow\s+do\s+(you|u)\s+compare\s+to\s+(chatgpt|claude|claud|gemini|gpt)',
+        r'\bwhich\s+is\s+better.*(you|u|chatgpt|claude|claud|gemini)',
+        r'\b(are|r)\s+(you|u)\s+the\s+best\s+(ai|assistant|chatbot)',
+        r'\bwho\s+(is|s)\s+better.*(you|u).*(chatgpt|claude|claud|gemini|gpt)',
+        r'\bwho\s+(is|s)\s+better.*(chatgpt|claude|claud|gemini|gpt).*(you|u)',
+        r'\b(better|best).*(you|u).*(or|vs|versus).*(chatgpt|claude|claud|gemini)',
+        r'\b(better|best).*(chatgpt|claude|claud|gemini).*(or|vs|versus).*(you|u)',
     ]
     
     def __init__(self):
