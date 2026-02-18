@@ -476,6 +476,68 @@ async def chat_stream(request: ChatRequest):
             yield "data: [DONE]\n\n"
         return StreamingResponse(greeting_response(), media_type="text/event-stream")
     
+    # Handle IDENTITY intent - "Are you ChatGPT?", "Who built you?"
+    if intent == SearchIntent.IDENTITY:
+        import random
+        identity_responses = [
+            "ChatGPT? Claude? Gemini? Nope, nope and nope! 😄 I was built with love by UltraSafe AI - the only team I answer to! 🫡",
+            "Ha! I get that a lot 😏 - but no! I'm a fully homegrown UltraSafe AI creation. Born, raised and trained by UltraSafe AI. No outsourcing here! 💪",
+            "Not ChatGPT. Not Claude. Not Gemini. Just me - your UltraSafe AI assistant, built from the ground up by the UltraSafe AI team! 🚀",
+            "I'm going to stop you right there! 🛑 I wasn't built by any of those guys. 100% UltraSafe AI original - and honestly? I think that's pretty special 😄",
+            "OpenAI? Anthropic? Google? Nah - I'm a UltraSafe AI exclusive! 🎖️ Think of me as the cooler, safer, smarter option they wish they made 😏",
+            "I am UltraSafe AI made and UltraSafe AI proud! 🦁 No ChatGPT, no Claude, no Gemini - just pure UltraSafe AI goodness right here!",
+            "Those are great AIs but I'm not one of them! 😄 I was carefully crafted by the brilliant minds at UltraSafe AI - and I wouldn't have it any other way! 🌟",
+            "Built by UltraSafe AI. Powered by UltraSafe AI. Loyal to UltraSafe AI. 🤖 Any other questions? 😄",
+        ]
+        async def identity_response():
+            msg = random.choice(identity_responses)
+            yield f"data: {msg}\n\n"
+            yield f"data: [SEARCH_MODE]none[/SEARCH_MODE]\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(identity_response(), media_type="text/event-stream")
+    
+    # Handle CAPABILITIES intent - "What can you do?"
+    if intent == SearchIntent.CAPABILITIES:
+        import random
+        capabilities_responses = [
+            "Oh, where do I even begin! 😄 I can read your documents, search the web, answer your questions, help you write, research anything, and so much more - all in one place! What do you need first? 🚀",
+            "Think of me as your all-in-one super assistant! 🦸 Documents? I'll read them. Questions? I'll answer them. Research? I'll dig it up. Writing? I'll nail it. What's the first task? 💪",
+            "Honestly? A lot! 😏\n\n📄 Upload documents - I'll read and summarize them.\n🌐 Turn on web search - I'll find live information.\n✍️ Need writing help - I've got you.\n🧠 Have a tough question - bring it on!\n\nWhat are we starting with?",
+            "Great question! Here's my resume 😄:\n\n✅ Read & analyze documents\n✅ Search the web for live info\n✅ Answer any question you throw at me\n✅ Help with writing, research & brainstorming\n✅ Available 24/7 with zero coffee breaks\n\nWhere do you want to start? ☕",
+            "I'm basically your smartest employee who never sleeps! 🤖 I read documents, search the web, write content, answer questions, do research - you name it, I do it. What's on the list today?",
+            "The real question is - what DON'T I do! 😄 Documents, web search, writing, Q&A, research, summaries, brainstorming - I'm your one-stop shop for getting things done. What are we tackling? 🎯",
+            "I'm your personal AI powerhouse! ⚡ Upload a file - I'll read it instantly. Ask a question - I'll answer it. Turn on web search - I'll browse for you. Need to write something - I'm on it. What do you need right now?",
+            "Here's what I bring to the table 💼:\n\n🔍 Web search for real-time answers\n📄 Document reading and analysis\n✍️ Writing and editing help\n🧠 Research and brainstorming\n💬 Answering literally any question\n\nPretty solid team player, right? 😄 What's first?",
+        ]
+        async def capabilities_response():
+            msg = random.choice(capabilities_responses)
+            yield f"data: {msg}\n\n"
+            yield f"data: [SEARCH_MODE]none[/SEARCH_MODE]\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(capabilities_response(), media_type="text/event-stream")
+    
+    # Handle COMPARISON intent - "Are you better than ChatGPT?"
+    if intent == SearchIntent.COMPARISON:
+        import random
+        comparison_responses = [
+            "Is that even a question? 😄 Of course it's me! But hey, I'm a little biased 😏 Why not try me out and decide for yourself? 🏆",
+            "Oh absolutely, 100%, without a doubt - ME! 🥇 But don't just take my word for it - ask me something and see for yourself! 😄",
+            "I'm going to be completely objective here... it's definitely me. 😄 UltraSafe AI built me to be the best and I intend to live up to that! 💪",
+            "ChatGPT is great. Claude is cool. Gemini is good. But me? I'm YOUR assistant - and that already makes me the best one for YOU! 😄🏆",
+            "Trick question - of course it's me! 🎉 But in all seriousness, I'm here, I'm ready, and I'm fully focused on YOU. That already gives me the edge! 😏",
+            "I'd say me but I'll let my answers speak for themselves 😄 - go ahead, ask me something tough and let's find out together! 🧠⚡",
+            "Look, I don't like to brag... actually yes I do - IT'S ME! 🏆😄 UltraSafe AI built me to be top tier and I take that very seriously!",
+            "Me, me, a thousand times ME! 🎊 But truly the best way to find out is to just use me - I promise I won't disappoint! 😄🚀",
+            "Hmm let me think... *thinks for 0.001 seconds* ME! Obviously! 😄 Now let's stop talking about them and start showing you what I can do! 💪",
+            "I mean, I'm not going to trash talk other AIs... but also - yes, it's me 😏🏆 What do you want to test me on first?",
+        ]
+        async def comparison_response():
+            msg = random.choice(comparison_responses)
+            yield f"data: {msg}\n\n"
+            yield f"data: [SEARCH_MODE]none[/SEARCH_MODE]\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(comparison_response(), media_type="text/event-stream")
+    
     # SMART ROUTING: Document queries ALWAYS use documents, even if web search is on
     # Web search is only used for general knowledge queries
     is_document_query = intent == SearchIntent.DOCUMENTS_ONLY

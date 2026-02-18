@@ -16,6 +16,9 @@ class SearchIntent(Enum):
     NO_DOCUMENTS = "no_documents"
     NEED_CLARIFICATION = "need_clarification"
     GREETING = "greeting"
+    IDENTITY = "identity"  # "Who built you?", "Are you ChatGPT?"
+    CAPABILITIES = "capabilities"  # "What can you do?", "What are your features?"
+    COMPARISON = "comparison"  # "Are you better than ChatGPT?"
 
 
 class QueryAnalyzer:
@@ -85,12 +88,49 @@ class QueryAnalyzer:
         r'^(ok|okay|sure|alright|got\s+it|cool|nice|great|awesome)[\s\!\?\.\,]*$',
     ]
     
+    # IDENTITY patterns - "Who built you?", "Are you ChatGPT?"
+    IDENTITY_PATTERNS = [
+        r'\b(are\s+you|r\s+u)\s+(chatgpt|chat\s*gpt|gpt|openai|claude|anthropic|gemini|google|bard|copilot|bing)',
+        r'\b(built|made|created|developed)\s+(by|with)\s+(openai|anthropic|google|microsoft|chatgpt|claude)',
+        r'\bwho\s+(built|made|created|developed)\s+you',
+        r'\bwhat\s+(are|r)\s+you\s*(built|made|powered)\s*(by|with|on)',
+        r'\bare\s+you\s+(gpt|gpt-4|gpt-3|gpt4|chatgpt-4)',
+        r'\bwho\s+(are|r)\s+you\s*\??$',
+        r'\bwhat\s+ai\s+(are|r)\s+you',
+        r'\bwhich\s+(ai|model|llm)\s+(are|r)\s+you',
+    ]
+    
+    # CAPABILITIES patterns - "What can you do?", "What are your features?"
+    CAPABILITIES_PATTERNS = [
+        r'\bwhat\s+(can|do)\s+you\s+do',
+        r'\bwhat\s+are\s+(your|you)\s+(features|capabilities|abilities|functions)',
+        r'\bhow\s+can\s+you\s+help',
+        r'\bwhat\s+are\s+you\s+capable\s+of',
+        r'\bwhat\'?s?\s+your\s+purpose',
+        r'\btell\s+me\s+what\s+you\s+(can\s+)?do',
+        r'\bwhat\s+do\s+you\s+do',
+        r'\bwhat\s+can\s+i\s+(do|ask)\s+(with|you)',
+    ]
+    
+    # COMPARISON patterns - "Are you better than ChatGPT?"
+    COMPARISON_PATTERNS = [
+        r'\b(are|r)\s+you\s+(better|smarter|faster|worse)\s+than\s+(chatgpt|claude|gemini|gpt|bard|copilot)',
+        r'\b(chatgpt|claude|gemini|gpt|bard|copilot)\s+(vs|versus|or)\s+(you|u)',
+        r'\b(you|u)\s+(vs|versus|or)\s+(chatgpt|claude|gemini|gpt|bard|copilot)',
+        r'\bhow\s+do\s+you\s+compare\s+to\s+(chatgpt|claude|gemini|gpt)',
+        r'\bwhich\s+is\s+better.*(you|chatgpt|claude|gemini)',
+        r'\bare\s+you\s+the\s+best\s+(ai|assistant|chatbot)',
+    ]
+    
     def __init__(self):
         self.doc_patterns = [re.compile(p, re.IGNORECASE) for p in self.DOC_PATTERNS]
         self.general_patterns = [re.compile(p, re.IGNORECASE) for p in self.GENERAL_PATTERNS]
         self.ambiguous_patterns = [re.compile(p, re.IGNORECASE) for p in self.AMBIGUOUS_PATTERNS]
         self.both_patterns = [re.compile(p, re.IGNORECASE) for p in self.BOTH_PATTERNS]
         self.greeting_patterns = [re.compile(p, re.IGNORECASE) for p in self.GREETING_PATTERNS]
+        self.identity_patterns = [re.compile(p, re.IGNORECASE) for p in self.IDENTITY_PATTERNS]
+        self.capabilities_patterns = [re.compile(p, re.IGNORECASE) for p in self.CAPABILITIES_PATTERNS]
+        self.comparison_patterns = [re.compile(p, re.IGNORECASE) for p in self.COMPARISON_PATTERNS]
     
     def analyze(self, query: str, has_documents: bool = True) -> Dict:
         """
@@ -105,7 +145,45 @@ class QueryAnalyzer:
         """
         q = query.lower().strip()
         
-        # FIRST: Check if it's a greeting/casual message - handle immediately
+        # FIRST: Check for special intents (identity, capabilities, comparison, greeting)
+        
+        # Check IDENTITY questions - "Are you ChatGPT?", "Who built you?"
+        is_identity = any(p.search(q) for p in self.identity_patterns)
+        if is_identity:
+            print(f"  [QueryAnalyzer] Intent: IDENTITY (who built you question)")
+            return {
+                "intent": SearchIntent.IDENTITY,
+                "use_docs": False,
+                "use_web": False,
+                "is_general": False,
+                "message": None
+            }
+        
+        # Check CAPABILITIES questions - "What can you do?"
+        is_capabilities = any(p.search(q) for p in self.capabilities_patterns)
+        if is_capabilities:
+            print(f"  [QueryAnalyzer] Intent: CAPABILITIES (what can you do question)")
+            return {
+                "intent": SearchIntent.CAPABILITIES,
+                "use_docs": False,
+                "use_web": False,
+                "is_general": False,
+                "message": None
+            }
+        
+        # Check COMPARISON questions - "Are you better than ChatGPT?"
+        is_comparison = any(p.search(q) for p in self.comparison_patterns)
+        if is_comparison:
+            print(f"  [QueryAnalyzer] Intent: COMPARISON (comparison question)")
+            return {
+                "intent": SearchIntent.COMPARISON,
+                "use_docs": False,
+                "use_web": False,
+                "is_general": False,
+                "message": None
+            }
+        
+        # Check if it's a greeting/casual message
         is_greeting = any(p.search(q) for p in self.greeting_patterns)
         if is_greeting:
             print(f"  [QueryAnalyzer] Intent: GREETING (casual message)")
