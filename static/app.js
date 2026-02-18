@@ -31,6 +31,65 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_FILES = 10;
 const ALLOWED_TYPES = ['.txt', '.pdf', '.md', '.docx', '.xlsx', '.csv', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'];
 
+// Welcome/Placeholder Messages (shown on load)
+const WELCOME_MESSAGES = [
+    "🔮 I read documents so you don't have to. Upload your files and watch the magic happen.",
+    "📄 Got a document? Drop it here and I'll turn pages into answers in seconds.",
+    "🗂️ Files, PDFs, docs - throw anything at me. I eat data for breakfast.",
+    "📎 Upload it. I'll read it, summarize it, and explain it - so you don't have to squint at 50 pages.",
+    "🧙‍♂️ Drop your document and I'll work my magic - summaries, answers, insights, all yours.",
+    "📬 Send me your files and consider them handled. I'll do the reading, you do the relaxing.",
+    "🤓 50 pages? 100 pages? No problem. Upload it and I'll break it down like it's nothing.",
+    "🗄️ Your documents deserve better than collecting dust. Drop them here and let's get to work.",
+    "📖 I read so fast it's almost unfair. Upload your file and see what I mean.",
+    "🔍 Hidden inside your document is exactly what you need - let me find it for you. Upload away!",
+    "🧹 Messy reports, long PDFs, confusing contracts - I'll clean it all up. Just upload!",
+    "💡 Every document has a story. Drop yours here and I'll tell you exactly what it's saying.",
+    "📂 Drag it. Drop it. Done. I'll handle everything from here.",
+    "🎯 Stop scrolling through endless pages. Upload your file and I'll get straight to the point.",
+    "🏋️ Heavy documents are my specialty. The bigger the file, the more I flex. Upload it!",
+    "⚡ Upload your document and get answers in seconds - not hours. Let's go!",
+    "🕵️ Your document is hiding answers. I'll find every single one. Drop the file!",
+    "🧃 I'll squeeze every last drop of insight from your document. Just upload and watch!",
+    "📜 Old reports, new files, long contracts - I don't discriminate. Drop anything here!",
+    "🚀 Your file + my brain = pure magic. Upload something and let's find out together!",
+];
+
+// Web Search ON Messages (shown when toggle is turned ON)
+const WEB_SEARCH_ON_MESSAGES = [
+    "🌐 The whole internet, at your service. Ask me anything and I'll go fetch it for you.",
+    "🔍 Why Google it yourself? Ask me and I'll bring the answer straight to you.",
+    "🕵️ I browse so you don't have to. Ask away and I'll do the digging!",
+    "🛰️ I've got eyes on the whole internet. Ask me anything - I'll find it in seconds.",
+    "🌍 The entire web is my playground. What do you need me to find today?",
+    "🎣 Ask me anything and I'll cast my net across the internet and reel in your answer!",
+    "🚀 Real-time answers, live from the web. Ask your question and I'll launch right away!",
+    "⚡ The internet is fast. I'm faster. What do you want to know?",
+    "🔎 No more endless scrolling. I'll search, filter, and bring back exactly what you need.",
+    "🧭 Lost in the internet? Let me navigate for you. Ask me anything!",
+    "📡 Tuned into the live web and ready to receive your question. What's it going to be?",
+    "🏄 Surfing the web so you don't have to. Toss me a question and I'll ride the wave!",
+    "🤿 I'll dive deep into the internet and surface with exactly what you're looking for. Ask away!",
+    "🗺️ The internet is massive but I know every corner. What are we looking for today?",
+    "🔭 I can see across the entire web from here. Point me in a direction - what do you need?",
+    "🐕 Consider me your internet fetch dog - ask something and I'll bring it right back! 🎾",
+    "🍳 Fresh results, hot off the web. Ask your question and I'll serve it up immediately!",
+    "🧲 I attract answers from across the internet like a magnet. What do you want me to pull in?",
+    "🎯 You ask. I search. You win. The internet doesn't stand a chance.",
+    "🌊 The web is an ocean of information - lucky for you, I'm an excellent swimmer. Ask away!",
+];
+
+// Get random message without repeating the last one
+function getRandomMessage(messages, storageKey) {
+    const lastIndex = parseInt(sessionStorage.getItem(storageKey) || '-1');
+    let newIndex;
+    do {
+        newIndex = Math.floor(Math.random() * messages.length);
+    } while (newIndex === lastIndex && messages.length > 1);
+    sessionStorage.setItem(storageKey, newIndex.toString());
+    return messages[newIndex];
+}
+
 // ============================================
 // State
 // ============================================
@@ -39,6 +98,7 @@ let currentPage = 'overview';
 let chatUploadedFiles = []; // Track files uploaded via chat
 let currentUser = null;
 let authToken = null;
+let forceWebSearch = false; // Track if user wants to force web search
 
 // Auth service URL
 const AUTH_URL = 'http://localhost:8001';
@@ -59,7 +119,42 @@ document.addEventListener('DOMContentLoaded', () => {
     setupAdmin();
     setupDeleteAll();
     setupUserProfile();
+    setRandomWelcomeMessage();
 });
+
+// Set random welcome message on page load
+function setRandomWelcomeMessage() {
+    const welcomeContent = document.getElementById('welcome-message-content');
+    if (welcomeContent) {
+        const msg = getRandomMessage(WELCOME_MESSAGES, 'lastWelcomeIndex');
+        welcomeContent.innerHTML = `<p>${msg}</p>`;
+    }
+}
+
+// Show web search ON notification in chat
+function showWebSearchOnNotification() {
+    if (!chatMessages) return;
+    
+    const msg = getRandomMessage(WEB_SEARCH_ON_MESSAGES, 'lastWebSearchOnIndex');
+    
+    const notificationDiv = document.createElement('div');
+    notificationDiv.className = 'message assistant web-search-notification';
+    notificationDiv.innerHTML = `
+        <div class="message-avatar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="2" y1="12" x2="22" y2="12"/>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+        </div>
+        <div class="message-content">
+            <p>${msg}</p>
+        </div>
+    `;
+    
+    chatMessages.appendChild(notificationDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
 
 // ============================================
 // Authentication
@@ -573,12 +668,34 @@ function setupChat() {
         });
     }
     
+    // Web search toggle button
+    const webSearchToggle = document.getElementById('web-search-toggle');
+    if (webSearchToggle) {
+        webSearchToggle.addEventListener('click', () => {
+            forceWebSearch = !forceWebSearch;
+            webSearchToggle.classList.toggle('active', forceWebSearch);
+            
+            // Update placeholder text
+            if (questionInput) {
+                questionInput.placeholder = forceWebSearch 
+                    ? 'Search the web...' 
+                    : 'Ask a question about your documents...';
+            }
+            
+            // Show notification message when turned ON
+            if (forceWebSearch) {
+                showWebSearchOnNotification();
+            }
+        });
+    }
+    
     const clearChat = document.getElementById('clear-chat');
     if (clearChat) {
         clearChat.addEventListener('click', () => {
             if (chatMessages) {
+                const welcomeMsg = getRandomMessage(WELCOME_MESSAGES, 'lastWelcomeIndex');
                 chatMessages.innerHTML = `
-                    <div class="message assistant">
+                    <div class="message assistant" id="welcome-message">
                         <div class="message-avatar">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 2L2 7L12 12L22 7L12 2Z"/>
@@ -586,8 +703,8 @@ function setupChat() {
                                 <path d="M2 12L12 17L22 12"/>
                             </svg>
                         </div>
-                        <div class="message-content">
-                            <p>🔮 I read documents so you don't have to. Upload your files and watch the magic happen.</p>
+                        <div class="message-content" id="welcome-message-content">
+                            <p>${welcomeMsg}</p>
                         </div>
                     </div>
                 `;
@@ -639,7 +756,8 @@ async function handleSendQuestion() {
             body: JSON.stringify({ 
                 question, 
                 n_chunks: 3,
-                filter_sources: uploadedFileNames.length > 0 ? uploadedFileNames : null
+                filter_sources: uploadedFileNames.length > 0 ? uploadedFileNames : null,
+                force_web_search: forceWebSearch
             })
         });
         
@@ -734,13 +852,37 @@ function addMessage(content, role, sources = []) {
         </div>
     ` : '';
     
+    // Add action buttons for user messages
+    const userActionsHtml = role === 'user' ? `
+        <div class="message-actions">
+            <button class="msg-action-btn" onclick="copyUserMessage(this)" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            </button>
+            <button class="msg-action-btn" onclick="editUserMessage(this)" title="Edit">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+            </button>
+        </div>
+    ` : '';
+    
     messageDiv.innerHTML = `
         ${avatarHtml}
         <div class="message-content">
             ${formatMessage(content)}
             ${sourcesHtml}
         </div>
+        ${userActionsHtml}
     `;
+    
+    // Store original text for user messages
+    if (role === 'user') {
+        messageDiv.dataset.originalText = content;
+    }
     
     chatMessages.appendChild(messageDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -799,21 +941,55 @@ function finalizeStreamingMessage(messageDiv, content, sources, webSources = [],
         `;
     }
     
-    // Search mode indicator
-    const modeText = {
-        'documents_only': '📄 From documents',
-        'web_only': '🌐 From web',
-        'both': '📄+🌐 From documents & web'
-    };
+    // Search mode indicator - only show if there are actual sources
+    const hasDocSources = sources.length > 0;
+    const hasWebSources = webSources.length > 0;
     
-    if (searchMode && modeText[searchMode]) {
-        sourcesHtml += `<div class="search-mode-tag">${modeText[searchMode]}</div>`;
+    // Only show mode tag if there are actual sources to show
+    if (hasDocSources && hasWebSources) {
+        sourcesHtml += `<div class="search-mode-tag">📄+🌐 From documents & web</div>`;
+    } else if (hasDocSources) {
+        sourcesHtml += `<div class="search-mode-tag">📄 From documents</div>`;
+    } else if (hasWebSources) {
+        sourcesHtml += `<div class="search-mode-tag">🌐 From web</div>`;
     }
+    // If no sources at all, don't show any mode tag
+    
+    // Add assistant message action buttons
+    const actionsHtml = `
+        <div class="assistant-actions">
+            <button class="msg-action-btn" onclick="copyAssistantMessage(this)" title="Copy">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            </button>
+            <button class="msg-action-btn" onclick="regenerateResponse(this)" title="Regenerate">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6"></path>
+                    <path d="M1 20v-6h6"></path>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+            </button>
+            <button class="msg-action-btn" onclick="shareMessage(this)" title="Share">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="18" cy="5" r="3"></circle>
+                    <circle cx="6" cy="12" r="3"></circle>
+                    <circle cx="18" cy="19" r="3"></circle>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+            </button>
+        </div>
+    `;
     
     const streamingEl = contentEl.querySelector('.streaming-content');
     if (streamingEl) {
-        streamingEl.outerHTML = formatMessage(content) + sourcesHtml;
+        streamingEl.outerHTML = formatMessage(content) + sourcesHtml + actionsHtml;
     }
+    
+    // Store the response content for copy/regenerate
+    messageDiv.dataset.responseContent = content;
 }
 
 function formatMessage(text) {
@@ -1174,6 +1350,9 @@ async function previewDocument(filename) {
     }
 }
 
+// Store current JSON data for copy/download
+let currentJsonData = null;
+
 async function loadDocumentJson(filename) {
     const jsonContent = document.getElementById('json-content');
     const jsonLoading = document.getElementById('json-loading');
@@ -1187,65 +1366,290 @@ async function loadDocumentJson(filename) {
         const response = await fetch(`/json?name=${encodeURIComponent(filename)}`);
         
         if (!response.ok) {
-            jsonContent.textContent = JSON.stringify({ error: 'Failed to extract JSON' }, null, 2);
+            jsonContent.innerHTML = syntaxHighlightJson(JSON.stringify({ error: 'Failed to extract JSON' }, null, 2));
             return;
         }
         
         const data = await response.json();
-        // Filter out empty fields before displaying
-        const filteredData = filterEmptyFields(data.data);
-        // Render as formatted HTML
-        jsonContent.innerHTML = renderJsonAsHtml(filteredData);
+        // Store for copy/download
+        currentJsonData = data.data;
+        // Display as proper JSON with syntax highlighting
+        const jsonString = JSON.stringify(data.data, null, 2);
+        jsonContent.innerHTML = syntaxHighlightJson(jsonString);
         
     } catch (error) {
-        jsonContent.textContent = JSON.stringify({ error: error.message }, null, 2);
+        jsonContent.innerHTML = syntaxHighlightJson(JSON.stringify({ error: error.message }, null, 2));
     } finally {
         if (jsonLoading) jsonLoading.classList.add('hidden');
     }
 }
 
-// Render JSON as formatted HTML with proper styling
-function renderJsonAsHtml(obj, level = 0) {
-    if (obj === null || obj === undefined) return '';
+// Syntax highlight JSON string
+function syntaxHighlightJson(json) {
+    // Escape HTML entities
+    json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     
-    if (typeof obj !== 'object') {
-        return `<span class="json-value">${escapeHtml(String(obj))}</span>`;
-    }
-    
-    if (Array.isArray(obj)) {
-        if (obj.length === 0) return '';
-        return obj.map(item => renderJsonAsHtml(item, level)).join('');
-    }
-    
-    let html = '';
-    for (const [key, value] of Object.entries(obj)) {
-        // Skip if value is empty after filtering
-        if (isEmptyValue(value)) continue;
-        
-        const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-        
-        if (typeof value === 'object' && value !== null) {
-            const nestedHtml = renderJsonAsHtml(value, level + 1);
-            if (nestedHtml.trim()) {
-                html += `<div class="json-field" style="margin-left: ${level * 16}px;">
-                    <div class="json-key">${escapeHtml(formattedKey)}:</div>
-                    <div class="json-nested">${nestedHtml}</div>
-                </div>`;
+    // Apply syntax highlighting
+    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+        let cls = 'json-number';
+        if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+                cls = 'json-key';
+            } else {
+                cls = 'json-string';
             }
-        } else {
-            html += `<div class="json-field" style="margin-left: ${level * 16}px;">
-                <div class="json-key">${escapeHtml(formattedKey)}:</div>
-                <div class="json-value">${escapeHtml(String(value))}</div>
-            </div>`;
+        } else if (/true|false/.test(match)) {
+            cls = 'json-boolean';
+        } else if (/null/.test(match)) {
+            cls = 'json-null';
         }
+        return '<span class="' + cls + '">' + match + '</span>';
+    });
+}
+
+// Copy JSON to clipboard
+async function copyJsonToClipboard() {
+    if (!currentJsonData) return;
+    
+    const jsonString = JSON.stringify(currentJsonData, null, 2);
+    
+    try {
+        await navigator.clipboard.writeText(jsonString);
+        alert('JSON copied to clipboard!');
+    } catch (error) {
+        // Fallback for older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = jsonString;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        alert('JSON copied to clipboard!');
     }
-    return html;
+}
+
+// Download JSON file
+function downloadJson(filename) {
+    if (!currentJsonData) return;
+    
+    const jsonString = JSON.stringify(currentJsonData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename.replace(/\.[^/.]+$/, '') + '_data.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Copy user message to clipboard
+async function copyUserMessage(button) {
+    const messageDiv = button.closest('.message');
+    const originalText = messageDiv.dataset.originalText;
+    
+    try {
+        await navigator.clipboard.writeText(originalText);
+        // Show feedback
+        button.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+        `;
+        setTimeout(() => {
+            button.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            `;
+        }, 1500);
+    } catch (error) {
+        // Fallback
+        const textarea = document.createElement('textarea');
+        textarea.value = originalText;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+    }
+}
+
+// Edit user message - puts text in input and removes messages after it
+function editUserMessage(button) {
+    const messageDiv = button.closest('.message');
+    const originalText = messageDiv.dataset.originalText;
+    
+    // Put text in input field
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+        chatInput.value = originalText;
+        chatInput.focus();
+    }
+    
+    // Remove this message and all messages after it
+    let currentEl = messageDiv;
+    const toRemove = [];
+    while (currentEl) {
+        toRemove.push(currentEl);
+        currentEl = currentEl.nextElementSibling;
+    }
+    toRemove.forEach(el => el.remove());
+}
+
+// Copy assistant message to clipboard
+async function copyAssistantMessage(button) {
+    const messageDiv = button.closest('.message');
+    const responseContent = messageDiv.dataset.responseContent || messageDiv.querySelector('.message-content')?.innerText || '';
+    
+    try {
+        await navigator.clipboard.writeText(responseContent);
+        // Show feedback
+        button.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+        `;
+        setTimeout(() => {
+            button.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            `;
+        }, 1500);
+    } catch (error) {
+        const textarea = document.createElement('textarea');
+        textarea.value = responseContent;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+    }
+}
+
+// Regenerate response - find the user message before this and re-send
+async function regenerateResponse(button) {
+    const assistantMsg = button.closest('.message');
+    
+    // Find the user message before this assistant message
+    let userMsg = assistantMsg.previousElementSibling;
+    while (userMsg && !userMsg.classList.contains('user')) {
+        userMsg = userMsg.previousElementSibling;
+    }
+    
+    if (!userMsg || !userMsg.dataset.originalText) {
+        alert('Could not find the original question to regenerate.');
+        return;
+    }
+    
+    const originalQuestion = userMsg.dataset.originalText;
+    
+    // Remove the assistant message
+    assistantMsg.remove();
+    
+    // Re-send the question
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+        chatInput.value = originalQuestion;
+        // Trigger send
+        const sendBtn = document.getElementById('sendButton');
+        if (sendBtn) sendBtn.click();
+    }
+}
+
+// Share a single message
+async function shareMessage(button) {
+    const messageDiv = button.closest('.message');
+    const content = messageDiv.dataset.responseContent || messageDiv.querySelector('.message-content')?.innerText || '';
+    
+    // Try native share API first
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'Shared from USF RAG',
+                text: content
+            });
+            return;
+        } catch (e) {
+            // User cancelled or error, fall through to copy
+        }
+    }
+    
+    // Fallback: copy to clipboard with share text
+    const shareText = `📄 Shared from USF RAG:\n\n${content}`;
+    try {
+        await navigator.clipboard.writeText(shareText);
+        button.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+        `;
+        setTimeout(() => {
+            button.innerHTML = `
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="18" cy="5" r="3"></circle>
+                    <circle cx="6" cy="12" r="3"></circle>
+                    <circle cx="18" cy="19" r="3"></circle>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+            `;
+        }, 1500);
+        alert('Response copied to clipboard for sharing!');
+    } catch (e) {
+        alert('Could not share. Please copy manually.');
+    }
+}
+
+// Share entire chat
+async function shareChat() {
+    const messages = document.querySelectorAll('#chatMessages .message');
+    if (messages.length === 0) {
+        alert('No messages to share.');
+        return;
+    }
+    
+    let chatText = '📄 USF RAG Chat Export\n' + '='.repeat(30) + '\n\n';
+    
+    messages.forEach(msg => {
+        const isUser = msg.classList.contains('user');
+        const role = isUser ? '👤 You' : '🤖 Assistant';
+        const content = isUser 
+            ? (msg.dataset.originalText || msg.querySelector('.message-content')?.innerText || '')
+            : (msg.dataset.responseContent || msg.querySelector('.message-content')?.innerText || '');
+        
+        chatText += `${role}:\n${content}\n\n`;
+    });
+    
+    // Try native share API
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'USF RAG Chat',
+                text: chatText
+            });
+            return;
+        } catch (e) {
+            // Fall through to copy
+        }
+    }
+    
+    // Fallback: copy to clipboard
+    try {
+        await navigator.clipboard.writeText(chatText);
+        alert('Chat copied to clipboard for sharing!');
+    } catch (e) {
+        alert('Could not share. Please copy manually.');
+    }
 }
 
 // Filter out empty, null, undefined, or placeholder values from JSON

@@ -247,6 +247,49 @@ When multiple documents are provided:
 **Summary:**
 [Brief conclusion using document terminology]"""
     
+    def _clean_unicode(self, text: str) -> str:
+        """
+        Clean unicode characters from text, replacing with ASCII equivalents.
+        """
+        if not text:
+            return text
+        
+        # Common unicode replacements
+        replacements = {
+            '\u2013': '-',  # en-dash
+            '\u2014': '-',  # em-dash
+            '\u2015': '-',  # horizontal bar
+            '\u2018': "'",  # left single quote
+            '\u2019': "'",  # right single quote
+            '\u201c': '"',  # left double quote
+            '\u201d': '"',  # right double quote
+            '\u2026': '...',  # ellipsis
+            '\u2022': '-',  # bullet
+            '\u2023': '-',  # triangular bullet
+            '\u2043': '-',  # hyphen bullet
+            '\u00a0': ' ',  # non-breaking space
+            '\u00b7': '-',  # middle dot
+            '\u2010': '-',  # hyphen
+            '\u2011': '-',  # non-breaking hyphen
+            '\u2012': '-',  # figure dash
+            '\u00ad': '',   # soft hyphen
+            '\u200b': '',   # zero-width space
+            '\u200c': '',   # zero-width non-joiner
+            '\u200d': '',   # zero-width joiner
+            '\ufeff': '',   # byte order mark
+            '\u2032': "'",  # prime
+            '\u2033': '"',  # double prime
+            '\u00ab': '"',  # left guillemet
+            '\u00bb': '"',  # right guillemet
+            '\u201a': ',',  # single low quote
+            '\u201e': '"',  # double low quote
+        }
+        
+        for unicode_char, ascii_char in replacements.items():
+            text = text.replace(unicode_char, ascii_char)
+        
+        return text
+    
     def _build_context(self, chunks: List[Dict]) -> str:
         """
         Build a context string from retrieved chunks.
@@ -467,11 +510,13 @@ My question: {question}"""
                                     delta = chunk_data['choices'][0].get('delta', {})
                                     content = delta.get('content', '')
                                     if content:
+                                        # Clean unicode characters
+                                        content = self._clean_unicode(content)
                                         yield content
                             except json.JSONDecodeError:
                                 # If not JSON, yield the raw text
                                 if data and data != '[DONE]':
-                                    yield data
+                                    yield self._clean_unicode(data)
                                 
             print(f"  ✓ Stream completed successfully")
             
@@ -506,10 +551,10 @@ My question: {question}"""
         
         if web_results:
             web_text = "\n\n".join([
-                f"From web ({r.get('url', 'unknown')}):\n{r.get('snippet', r.get('title', ''))}" 
+                f"**{r.get('title', 'Web Result')}**\nSource: {r.get('url', 'unknown')}\nContent: {r.get('snippet', '')}" 
                 for r in web_results[:5]
             ])
-            context_parts.append(f"🌐 FROM WEB SEARCH:\n{web_text}")
+            context_parts.append(f"🌐 WEB SEARCH RESULTS:\n{web_text}")
         
         context = "\n\n---\n\n".join(context_parts) if context_parts else "No relevant information found."
         
@@ -526,10 +571,21 @@ IMPORTANT RULES FOR THIS RESPONSE:
         elif search_mode == "web_only":
             mode_rules = """
 IMPORTANT RULES FOR THIS RESPONSE:
-- Answer using the web search results provided
-- Cite the web sources when providing information
-- Be clear that this information comes from web search
-- If the web results don't contain relevant information, say so"""
+- Answer the question directly and clearly using the web search results
+- Start with "According to current sources:" then provide a well-structured answer
+- Format your response with clear sections using **bold headers** and bullet points where appropriate
+- Focus on the FACTS from the search results - what is it, when, why, how
+- Keep the answer informative and educational, not meta-commentary about the search results
+- Do NOT mention "blog posts", "search results quality", or ask follow-up questions
+- Use proper formatting: headers, bullet points, and clear paragraphs
+
+CRITICAL CHARACTER RULES (MUST FOLLOW):
+- Use ONLY basic ASCII characters
+- For dashes use hyphen-minus (-) NEVER em-dash or en-dash
+- For quotes use straight quotes (' and ") NEVER curly quotes
+- NO unicode symbols, NO emojis, NO special characters
+- Numbers: 0-9, Letters: a-z A-Z, Punctuation: . , ! ? - : ; ' " ( ) [ ]
+- For bullet points use only dash (-) at start of line"""
         else:  # both
             mode_rules = """
 IMPORTANT RULES FOR THIS RESPONSE:
@@ -567,51 +623,68 @@ My question: {question}"""
             "web_search": False  # We handle web search ourselves
         }
         
-        try:
-            print(f"  Streaming smart answer (mode: {search_mode})...")
-            response = self.session.post(
-                f"{self.base_url}/usf/v1/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=60,
-                stream=True
-            )
-            
-            if response.status_code != 200:
-                error_detail = response.text[:200] if response.text else "Unknown error"
-                raise ValueError(f"USF API error ({response.status_code}): {error_detail}")
-            
-            # Process streaming response
-            import json
-            buffer = ""
-            
-            for chunk in response.iter_content(chunk_size=1, decode_unicode=True):
-                if chunk:
-                    buffer += chunk
-                    
-                    while '\n' in buffer:
-                        line, buffer = buffer.split('\n', 1)
-                        line = line.strip()
+        import json
+        import time
+        
+        max_retries = 3
+        retry_delay = 1
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    print(f"  Retry attempt {attempt + 1}/{max_retries}...")
+                    time.sleep(retry_delay * attempt)
+                
+                print(f"  Streaming smart answer (mode: {search_mode})...")
+                response = self.session.post(
+                    f"{self.base_url}/usf/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=60,
+                    stream=True
+                )
+                
+                if response.status_code != 200:
+                    error_detail = response.text[:200] if response.text else "Unknown error"
+                    raise ValueError(f"USF API error ({response.status_code}): {error_detail}")
+                
+                # Process streaming response
+                buffer = ""
+                
+                for chunk in response.iter_content(chunk_size=1, decode_unicode=True):
+                    if chunk:
+                        buffer += chunk
                         
-                        if line.startswith('data: '):
-                            data = line[6:]
-                            if data == '[DONE]':
-                                break
-                            try:
-                                chunk_data = json.loads(data)
-                                if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
-                                    delta = chunk_data['choices'][0].get('delta', {})
-                                    content = delta.get('content', '')
-                                    if content:
-                                        yield content
-                            except json.JSONDecodeError:
-                                if data and data != '[DONE]':
-                                    yield data
-                                
-            print(f"  ✓ Smart stream completed successfully")
-            
-        except requests.exceptions.RequestException as e:
-            raise ValueError(f"USF API streaming failed: {str(e)}")
+                        while '\n' in buffer:
+                            line, buffer = buffer.split('\n', 1)
+                            line = line.strip()
+                            
+                            if line.startswith('data: '):
+                                data = line[6:]
+                                if data == '[DONE]':
+                                    break
+                                try:
+                                    chunk_data = json.loads(data)
+                                    if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
+                                        delta = chunk_data['choices'][0].get('delta', {})
+                                        content = delta.get('content', '')
+                                        if content:
+                                            # Clean unicode characters
+                                            content = self._clean_unicode(content)
+                                            yield content
+                                except json.JSONDecodeError:
+                                    if data and data != '[DONE]':
+                                        yield self._clean_unicode(data)
+                                    
+                print(f"  ✓ Smart stream completed successfully")
+                return  # Success, exit the retry loop
+                
+            except (requests.exceptions.RequestException, ConnectionError, ConnectionResetError) as e:
+                last_error = e
+                print(f"  ⚠ Connection error (attempt {attempt + 1}): {str(e)[:100]}")
+                if attempt == max_retries - 1:
+                    raise ValueError(f"USF API streaming failed after {max_retries} attempts: {str(e)}")
     
     def generate_with_history(
         self, 

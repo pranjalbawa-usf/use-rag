@@ -13,6 +13,9 @@ class SearchIntent(Enum):
     DOCUMENTS_ONLY = "documents_only"
     WEB_ONLY = "web_only"
     BOTH = "both"
+    NO_DOCUMENTS = "no_documents"
+    NEED_CLARIFICATION = "need_clarification"
+    GREETING = "greeting"
 
 
 class QueryAnalyzer:
@@ -23,114 +26,192 @@ class QueryAnalyzer:
     - DOCUMENTS_ONLY: Questions about specific document content
     - WEB_ONLY: General knowledge questions, definitions, how-tos
     - BOTH: Questions that need document data + web explanation
+    - NO_DOCUMENTS: User asking about docs but none uploaded
+    - NEED_CLARIFICATION: Ambiguous query needs more context
     """
     
-    # Patterns that indicate document-specific queries
+    # DOCUMENT queries - these MUST search documents, NEVER web
     DOC_PATTERNS = [
-        r'\b(my|this|the|uploaded)\s+(document|file|pdf|report|invoice|receipt|contract)\b',
-        r'\b(in|from)\s+(the|this|my)\s+(document|file|pdf|report)\b',
-        r'\b(summarize|summary)\s+(this|the|my)\b',
-        r'\bthe\s+(total|amount|number|date|name|value|invoice|order|item)\b',
-        r'\b(invoice|receipt|contract|order)\s*(number|#|date|amount|total)\b',
-        r'\bshow\s+me.*\b(from|in)\s+(my|the)\b',
-        r'\bwhat\s+(is|are)\s+the\s+\w+\s+(in|from|on)\b',
-        r'\b(extract|find|get|show)\s+(the|all|my)\b',
-        r'\baccording\s+to\s+(the|my|this)\s+(document|file)\b',
-        r'\b(my|the)\s+(uploaded|attached)\b',
+        r'\b(the|my|this|these|uploaded|attached)\s*(document|documents|doc|docs|file|files|pdf|pdfs|report|reports)\b',
+        r'\b(document|documents|doc|docs|file|files|pdf|pdfs)\b',
+        r'\b(tell|show|give|read)\s*(me)?\s*(about)?\s*(the|my|this)?\s*(doc|docs|document|documents|file|files)\b',
+        r'\b(summarize|summary|summarise)\s*(the|my|this)?\s*(doc|docs|document|documents|file|files)?\b',
+        r'\b(in|from|according to)\s+(the|my|this)\s+(document|file|pdf|report)\b',
+        r'\bwhat\s+(does|did)\s+(the|my|this)\s+(document|file|report)\s+(say|mention|contain)\b',
+        r'\b(invoice|receipt|contract|order|po)\s*(number|#|no|date|amount|total)\b',
+        r'\b(total|amount|price|quantity|number|value)\s+(in|from|on)\s+(the|my|this)\b',
+        r'\babout\s+(the|my|this|these)\s*(doc|docs|document|documents|file|files|pdf|upload|uploaded)\b',
     ]
     
-    # Patterns that indicate web/general knowledge queries
-    WEB_PATTERNS = [
-        r'^what\s+is\s+(a|an)\s+\w+\??$',
-        r'^what\s+does\s+\w+\s+mean',
-        r'^define\s+',
+    # GENERAL KNOWLEDGE - should use WEB, NOT documents
+    GENERAL_PATTERNS = [
+        r'\bwhen\s+(is|was|does|did|will)\s+\w+\s+(start|end|begin|happen)\b',
+        r'\b(ramadan|eid|christmas|easter|diwali|hanukkah|thanksgiving)\b',
+        r'^what\s+is\s+(a|an|the)?\s*[a-z]+\s*\??$',
+        r'^what\s+does\s+[a-z]+\s+mean',
+        r'^define\s+[a-z]+',
         r'^how\s+do\s+(i|you|we)\s+',
         r'^how\s+to\s+',
-        r'\b(latest|current|recent|news|today|2024|2025|2026)\b',
         r'^who\s+(is|was|are)\s+',
-        r'^when\s+(did|was|is|will)\s+',
-        r'^where\s+(is|are|can)\s+',
-        r'^why\s+(do|does|is|are)\s+',
-        r'\b(explain|definition|meaning)\s+of\b',
-        r'\b(generally|typically|usually|normally)\b',
-        r'^tell\s+me\s+about\s+',
+        r'^where\s+(is|are|was)\s+',
+        r'\b(capital|president|ceo|founder|population)\s+of\b',
+        r'\b(latest|current|recent|today|news)\s+\w+',
+        r'\b(weather|stock price|score)\s+(in|today|now)\b',
+    ]
+    
+    # AMBIGUOUS queries that need context
+    AMBIGUOUS_PATTERNS = [
+        r'^tell\s+me\s+about\s+(this|it)\s*\??$',
+        r'^what\s+is\s+(this|it)\s*\??$',
+        r'^explain\s+(this|it)\s*\??$',
+        r'^(this|it)\s*\??$',
     ]
     
     # Patterns that indicate need for both sources
     BOTH_PATTERNS = [
-        r'what\s+does.*\s+(in|from)\s+(my|the|this)\s+(document|file).*mean',
-        r'explain.*\s+(in|from)\s+(my|the)\s+(document|file)',
-        r'(compare|contrast).*\s+(with|to)\s+(general|standard|typical)',
-        r'\b(term|phrase|word)\s+(in|from)\s+(my|the)\s+(document|file)\b',
-        r'what\s+does\s+this\s+(term|phrase|word)\s+mean',
+        r'what\s+does\s+(the|this).*\s+(in|from)\s+(my|the)\s+(document|file).*mean',
+        r'explain\s+(the|this).*\s+(in|from)\s+(my|the)\s+(document|file)',
+    ]
+    
+    # GREETING/CASUAL patterns - should NOT search anything, just respond friendly
+    GREETING_PATTERNS = [
+        r'^(hey|hi|hello|hiya|howdy|yo|sup|hola|greetings)[\s\!\?\.\,]*$',
+        r'^(hey|hi|hello)\s+(there|you|buddy|friend)[\s\!\?\.\,]*$',
+        r'^good\s+(morning|afternoon|evening|day)[\s\!\?\.\,]*$',
+        r'^(what\'?s?\s+up|wassup|whats\s+up)[\s\!\?\.\,]*$',
+        r'^(how\s+are\s+you|how\'?s\s+it\s+going|how\s+do\s+you\s+do)[\s\!\?\.\,]*$',
+        r'^(thanks|thank\s+you|thx|ty)[\s\!\?\.\,]*$',
+        r'^(bye|goodbye|see\s+you|later|cya)[\s\!\?\.\,]*$',
+        r'^(ok|okay|sure|alright|got\s+it|cool|nice|great|awesome)[\s\!\?\.\,]*$',
     ]
     
     def __init__(self):
         self.doc_patterns = [re.compile(p, re.IGNORECASE) for p in self.DOC_PATTERNS]
-        self.web_patterns = [re.compile(p, re.IGNORECASE) for p in self.WEB_PATTERNS]
+        self.general_patterns = [re.compile(p, re.IGNORECASE) for p in self.GENERAL_PATTERNS]
+        self.ambiguous_patterns = [re.compile(p, re.IGNORECASE) for p in self.AMBIGUOUS_PATTERNS]
         self.both_patterns = [re.compile(p, re.IGNORECASE) for p in self.BOTH_PATTERNS]
+        self.greeting_patterns = [re.compile(p, re.IGNORECASE) for p in self.GREETING_PATTERNS]
     
-    def analyze(self, query: str) -> Dict:
+    def analyze(self, query: str, has_documents: bool = True) -> Dict:
         """
         Analyze a query to determine search intent.
         
         Args:
             query: The user's question
+            has_documents: Whether user has uploaded any documents
             
         Returns:
-            Dict with intent, use_docs, use_web, and optional fallback_to_web
+            Dict with intent, use_docs, use_web, is_general, message
         """
         q = query.lower().strip()
+        
+        # FIRST: Check if it's a greeting/casual message - handle immediately
+        is_greeting = any(p.search(q) for p in self.greeting_patterns)
+        if is_greeting:
+            print(f"  [QueryAnalyzer] Intent: GREETING (casual message)")
+            return {
+                "intent": SearchIntent.GREETING,
+                "use_docs": False,
+                "use_web": False,
+                "is_general": False,
+                "message": None
+            }
+        
+        # Check if query is ambiguous (like "tell me about this")
+        is_ambiguous = any(p.search(q) for p in self.ambiguous_patterns)
+        
+        # Check if query is about documents
+        is_doc_query = any(p.search(q) for p in self.doc_patterns)
+        
+        # Check if query is general knowledge
+        is_general = any(p.search(q) for p in self.general_patterns)
         
         # Check BOTH patterns first (most specific)
         for pattern in self.both_patterns:
             if pattern.search(q):
-                print(f"  [QueryAnalyzer] Intent: BOTH (matched both pattern)")
+                print(f"  [QueryAnalyzer] Intent: BOTH (matched hybrid pattern)")
                 return {
                     "intent": SearchIntent.BOTH,
                     "use_docs": True,
-                    "use_web": True
+                    "use_web": True,
+                    "is_general": False,
+                    "message": None
                 }
         
-        # Score document and web patterns
-        doc_score = sum(1 for p in self.doc_patterns if p.search(q))
-        web_score = sum(1 for p in self.web_patterns if p.search(q))
+        # CASE 1: Query explicitly about documents
+        if is_doc_query:
+            if has_documents:
+                print(f"  [QueryAnalyzer] Intent: DOCUMENTS_ONLY (doc query, has docs)")
+                return {
+                    "intent": SearchIntent.DOCUMENTS_ONLY,
+                    "use_docs": True,
+                    "use_web": False,
+                    "is_general": False,
+                    "message": None
+                }
+            else:
+                print(f"  [QueryAnalyzer] Intent: NO_DOCUMENTS (doc query, no docs)")
+                return {
+                    "intent": SearchIntent.NO_DOCUMENTS,
+                    "use_docs": False,
+                    "use_web": False,
+                    "is_general": False,
+                    "message": "No documents uploaded yet. Please upload a document first, then ask me about it!"
+                }
         
-        # Clear document intent
-        if doc_score > 0 and web_score == 0:
-            print(f"  [QueryAnalyzer] Intent: DOCUMENTS_ONLY (doc_score={doc_score})")
-            return {
-                "intent": SearchIntent.DOCUMENTS_ONLY,
-                "use_docs": True,
-                "use_web": False
-            }
+        # CASE 2: Ambiguous query like "tell me about this"
+        if is_ambiguous:
+            if has_documents:
+                print(f"  [QueryAnalyzer] Intent: DOCUMENTS_ONLY (ambiguous, has docs)")
+                return {
+                    "intent": SearchIntent.DOCUMENTS_ONLY,
+                    "use_docs": True,
+                    "use_web": False,
+                    "is_general": False,
+                    "message": None
+                }
+            else:
+                print(f"  [QueryAnalyzer] Intent: NEED_CLARIFICATION (ambiguous, no docs)")
+                return {
+                    "intent": SearchIntent.NEED_CLARIFICATION,
+                    "use_docs": False,
+                    "use_web": False,
+                    "is_general": False,
+                    "message": "I'm not sure what you'd like to know about. Please upload a document and ask me about it, or ask a specific question!"
+                }
         
-        # Clear web intent
-        if web_score > 0 and doc_score == 0:
-            print(f"  [QueryAnalyzer] Intent: WEB_ONLY (web_score={web_score})")
+        # CASE 3: General knowledge question
+        if is_general and not is_doc_query:
+            print(f"  [QueryAnalyzer] Intent: WEB_ONLY (general knowledge)")
             return {
                 "intent": SearchIntent.WEB_ONLY,
                 "use_docs": False,
-                "use_web": True
+                "use_web": True,
+                "is_general": True,
+                "message": None
             }
         
-        # Both have scores - use both
-        if doc_score > 0 and web_score > 0:
-            print(f"  [QueryAnalyzer] Intent: BOTH (doc={doc_score}, web={web_score})")
+        # CASE 4: Default - try documents first if they exist
+        if has_documents:
+            print(f"  [QueryAnalyzer] Intent: DOCUMENTS_ONLY (default, has docs)")
             return {
-                "intent": SearchIntent.BOTH,
+                "intent": SearchIntent.DOCUMENTS_ONLY,
                 "use_docs": True,
-                "use_web": True
+                "use_web": False,
+                "is_general": False,
+                "fallback_to_web": True,
+                "message": None
             }
-        
-        # Default: search docs first, fallback to web if no good results
-        print(f"  [QueryAnalyzer] Intent: DOCUMENTS_ONLY (default, with web fallback)")
-        return {
-            "intent": SearchIntent.DOCUMENTS_ONLY,
-            "use_docs": True,
-            "use_web": False,
-            "fallback_to_web": True
-        }
+        else:
+            # No documents, not clearly general knowledge
+            print(f"  [QueryAnalyzer] Intent: NEED_CLARIFICATION (default, no docs)")
+            return {
+                "intent": SearchIntent.NEED_CLARIFICATION,
+                "use_docs": False,
+                "use_web": False,
+                "is_general": False,
+                "message": "I don't have any documents to search. Please upload a document, or ask a general knowledge question (and enable web search)."
+            }
     
     def should_fallback_to_web(self, results: List[Dict], threshold: float = 0.4) -> bool:
         """

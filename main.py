@@ -87,6 +87,7 @@ class ChatRequest(BaseModel):
     question: str
     n_chunks: Optional[int] = 5  # How many context chunks to use (default 5 for better context)
     filter_sources: Optional[List[str]] = None  # Filter search to specific documents
+    force_web_search: Optional[bool] = False  # Force web search mode
 
 
 class ChatResponse(BaseModel):
@@ -424,12 +425,108 @@ async def chat_stream(request: ChatRequest):
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty.")
     
-    # Analyze query intent
-    analysis = query_analyzer.analyze(request.question)
-    intent = analysis["intent"]
-    search_mode = intent.value
+    # IMPORTANT: Check if documents exist FIRST
+    stats = vector_store.get_stats()
+    has_documents = stats.get("total_chunks", 0) > 0
+    print(f"  [SmartSearch] Documents available: {has_documents} ({stats.get('total_chunks', 0)} chunks)")
     
-    print(f"  [SmartSearch] Intent: {search_mode}")
+    # Analyze query with document awareness
+    analysis = query_analyzer.analyze(request.question, has_documents=has_documents)
+    intent = analysis["intent"]
+    query_needs_web = intent in [SearchIntent.WEB_ONLY, SearchIntent.BOTH]
+    
+    # Handle NO_DOCUMENTS and NEED_CLARIFICATION intents immediately
+    if intent == SearchIntent.NO_DOCUMENTS or intent == SearchIntent.NEED_CLARIFICATION:
+        async def clarification_response():
+            msg = analysis.get("message", "Please upload a document first!")
+            yield f"data: {msg}\n\n"
+            yield f"data: [SEARCH_MODE]none[/SEARCH_MODE]\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(clarification_response(), media_type="text/event-stream")
+    
+    # Handle GREETING intent - respond friendly without searching
+    if intent == SearchIntent.GREETING:
+        import random
+        greetings = [
+            "Hey hey hey! 🎉 The chat is officially alive - what are we solving today?",
+            "Well hello there! 👋 I was just sitting here waiting for someone interesting to show up!",
+            "Hey! I'd say I was busy, but let's be honest - I've been waiting for you. What's up? 😄",
+            "HELLO HUMAN. 🤖 Systems are fully charged and ready. What can I do for you today?",
+            "Heyyy! ✌️ You showed up just in time. What's on your mind?",
+            "Oh, a visitor! 🎭 Welcome, welcome! The stage is set - what brings you here today?",
+            "Hey! 👊 Ready when you are - hit me!",
+            "Hey you! 😊 Great to see you here - what can I help you with today?",
+            "Hey... I've been expecting you. 🕵️ What are we getting into today?",
+            "YOOO! 🔥 You're here! Let's get into it - what do you need?",
+            "Oh look who just walked in! 😏 Welcome - I'm all yours. What do you need?",
+            "Hey! ⚡ You've got questions, I've got answers - let's make magic happen!",
+            "👀 Oh hey! Didn't see you there. Just kidding, I've been here the whole time. What's up?",
+            "Greetings, legend! 🌟 What brilliant thing are we working on today?",
+            "Hey! I just brewed a fresh pot of answers ☕ - what are you having?",
+            "Well well well... look who decided to show up! 😄 What can I do for you?",
+            "Hi there! 🚀 Buckle up - let's see what we can build, solve, or break today!",
+            "Heyyy, welcome back to the good side of the internet! 🌈 What's on your mind?",
+            "Hey! 🎯 I'm locked, loaded, and ready - what's the mission today?",
+            "Oh hi! You caught me at the perfect time. I was just about to be extremely helpful. 😄",
+        ]
+        async def greeting_response():
+            msg = random.choice(greetings)
+            yield f"data: {msg}\n\n"
+            yield f"data: [SEARCH_MODE]none[/SEARCH_MODE]\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(greeting_response(), media_type="text/event-stream")
+    
+    # SMART ROUTING: Document queries ALWAYS use documents, even if web search is on
+    # Web search is only used for general knowledge queries
+    is_document_query = intent == SearchIntent.DOCUMENTS_ONLY
+    
+    if is_document_query:
+        # Document query - ALWAYS search documents, ignore web search toggle
+        print(f"  [SmartSearch] Document query detected - using DOCUMENTS (ignoring web toggle)")
+        search_mode = "documents_only"
+        use_docs = True
+        use_web = False
+    elif request.force_web_search:
+        # General knowledge query with web search ON - use web
+        print(f"  [SmartSearch] General query with web search ON - using WEB")
+        search_mode = "web_only"
+        use_docs = False
+        use_web = True
+    else:
+        # General knowledge query with web search OFF - show message
+        print(f"  [SmartSearch] General query with web search OFF")
+        if query_needs_web:
+            import random
+            web_search_off_messages = [
+                "My internet antenna is down! 📡 Turn on web search and I'll fetch that for you in no time.",
+                "I'd go look that up, but someone unplugged my internet! Enable web search and I'm on it.",
+                "Beep boop - my web search engine is offline. Flip it on and I'll get you a fresh answer! 🤖",
+                "I'd love to investigate that for you, but my search radar is switched off. Turn it on and I'll crack the case!",
+                "Web search is off. No signal, no answer. Turn it on and I'll get right to it. ⚡",
+                "That one's beyond what I know off the top of my head - and web search is off, so I can't dig deeper. Switch it on and I've got you!",
+                "I'd venture out and find that answer, but my search compass is off right now! Enable web search to send me on the mission. 🧭",
+                "No web, no answer. Turn on web search - let's go! 🚀",
+                "Hmm, my search wings are clipped! 🦅 Enable web search and I'll soar out there and get your answer.",
+                "I'm flying blind on this one - web search is off! Switch it on and I'll find exactly what you need. 🔦",
+                "This question needs the internet and unfortunately I'm offline right now. 🌐 Flip on web search and let's go!",
+                "My search mode is napping 😴 - wake it up by enabling web search and I'll have your answer in seconds!",
+                "404: Web Search Not Found! 😅 Turn it on and I'll get right to it.",
+                "I'd swim out and get that answer but my search fins are off! 🐠 Enable web search to dive in.",
+                "Signal lost! 📻 Turn on web search and I'll tune right into your answer.",
+            ]
+            async def web_off_response():
+                msg = random.choice(web_search_off_messages)
+                yield f"data: {msg}\n\n"
+                yield f"data: [SEARCH_MODE]documents_only[/SEARCH_MODE]\n\n"
+                yield "data: [DONE]\n\n"
+            return StreamingResponse(web_off_response(), media_type="text/event-stream")
+        else:
+            # Default to documents
+            search_mode = "documents_only"
+            use_docs = True
+            use_web = False
+    
+    print(f"  [SmartSearch] Mode: {search_mode}")
     
     # Validate n_chunks
     n_chunks = max(1, min(request.n_chunks, 10))  # Clamp between 1 and 10
@@ -438,7 +535,7 @@ async def chat_stream(request: ChatRequest):
     web_results = []
     
     # Search documents if needed
-    if analysis["use_docs"]:
+    if use_docs:
         chunks = vector_store.search(
             request.question, 
             n_results=n_chunks,
@@ -447,16 +544,23 @@ async def chat_stream(request: ChatRequest):
         )
         print(f"  [SmartSearch] Found {len(chunks)} document chunks")
     
-    # Check if we should fallback to web
-    if analysis.get("fallback_to_web") and query_analyzer.should_fallback_to_web(chunks):
-        analysis["use_web"] = True
-        search_mode = "both"
-        print(f"  [SmartSearch] Low doc relevance, adding web search")
-    
-    # Search web if needed
-    if analysis["use_web"]:
+    # Search web ONLY if user enabled it
+    if use_web:
         web_results = web_search.search(request.question, num_results=5)
         print(f"  [SmartSearch] Found {len(web_results)} web results")
+    
+    # Fun messages for when web search is needed but disabled
+    import random
+    web_search_off_messages = [
+        "I'd venture out and find that answer, but my search compass is off right now! Enable web search to send me on the mission.",
+        "That one's beyond what I know off the top of my head - and web search is off, so I can't dig deeper. Switch it on and I've got you!",
+        "Web search is off. No signal, no answer. Turn it on and I'll get right to it!",
+        "I'd love to investigate that for you, but my search radar is switched off. Turn it on and I'll crack the case!",
+        "Beep boop - my web search engine is offline. Flip it on and I'll get you a fresh answer!",
+        "I'd go look that up, but someone unplugged my internet! Enable web search and I'm on it.",
+        "My internet antenna is down! Turn on web search and I'll fetch that for you in no time.",
+        "No web, no answer. Turn on web search - let's go!",
+    ]
     
     # Handle case where no results from either source
     if not chunks and not web_results:
@@ -469,26 +573,55 @@ async def chat_stream(request: ChatRequest):
                         missing_files.append(source)
                 
                 if missing_files:
-                    msg = f"📄 **No reference documents found**\n\nThe document(s) you're asking about have been deleted from the system:\n"
+                    msg = f"**No reference documents found**\n\nThe document(s) you're asking about have been deleted from the system:\n"
                     for f in missing_files[:3]:
                         msg += f"- {f}\n"
                     if len(missing_files) > 3:
                         msg += f"- ...and {len(missing_files) - 3} more\n"
                     msg += "\nPlease upload the documents again or clear this chat to start fresh."
                     yield f"data: {msg}\n\n"
+                elif not request.force_web_search:
+                    # Web search is OFF and no documents found - show fun message
+                    msg = random.choice(web_search_off_messages)
+                    yield f"data: {msg}\n\n"
                 else:
-                    yield "data: 📄 **No relevant information found**\n\nI couldn't find any relevant information to answer this question.\n\n"
-            elif intent == SearchIntent.WEB_ONLY:
-                yield "data: 🌐 **No web results found**\n\nI couldn't find relevant information on the web for this query.\n\n"
+                    yield "data: **No web results found**\n\nI couldn't find relevant information on the web for this query.\n\n"
+            elif not request.force_web_search:
+                # Web search is OFF and no documents found - show fun message
+                msg = random.choice(web_search_off_messages)
+                yield f"data: {msg}\n\n"
             else:
-                yield "data: 📄 **No documents available**\n\nPlease upload some documents first so I can help answer your questions!\n\n"
+                yield "data: **No documents available**\n\nPlease upload some documents first so I can help answer your questions!\n\n"
             yield f"data: [SEARCH_MODE]{search_mode}[/SEARCH_MODE]\n\n"
             yield "data: [DONE]\n\n"
         return StreamingResponse(no_results_response(), media_type="text/event-stream")
     
-    # Get unique sources for the response
-    sources = list(set(chunk["source"] for chunk in chunks)) if chunks else []
+    # Check if document results are actually relevant (score threshold)
+    # Lower threshold to 0.25 to be more inclusive
+    doc_relevance_threshold = 0.25
+    has_relevant_docs = False
+    if chunks:
+        top_score = chunks[0].get("score", 0) if chunks else 0
+        has_relevant_docs = top_score >= doc_relevance_threshold
+        print(f"  [SmartSearch] Top doc score: {top_score:.2f}, relevant: {has_relevant_docs}")
+    
+    # If user explicitly asked about documents (intent is DOCUMENTS_ONLY), always use chunks
+    is_explicit_doc_query = intent == SearchIntent.DOCUMENTS_ONLY
+    use_chunks_for_llm = chunks if (has_relevant_docs or is_explicit_doc_query) else []
+    
+    # Only include sources that are actually relevant
+    sources = list(set(chunk["source"] for chunk in chunks)) if (chunks and has_relevant_docs) else []
     web_sources = [{"title": r.get("title", ""), "url": r.get("url", "")} for r in web_results[:3]]
+    
+    # Determine actual search mode based on what we're using
+    if use_chunks_for_llm and web_results:
+        actual_search_mode = "both"
+    elif use_chunks_for_llm:
+        actual_search_mode = "documents_only"
+    elif web_results:
+        actual_search_mode = "web_only"
+    else:
+        actual_search_mode = "none"
     
     import asyncio
     import json
@@ -502,17 +635,19 @@ async def chat_stream(request: ChatRequest):
             import queue
             chunk_queue = queue.Queue()
             done_event = asyncio.Event()
+            full_response = []
             
             def run_sync_generator():
                 try:
                     # Use the smart search streaming method
                     for chunk in rag_engine.usf_service.generate_answer_stream_smart(
                         question=request.question,
-                        document_chunks=chunks,
+                        document_chunks=use_chunks_for_llm,
                         web_results=web_results,
-                        search_mode=search_mode
+                        search_mode=actual_search_mode
                     ):
                         chunk_queue.put(chunk)
+                        full_response.append(chunk)
                     chunk_queue.put(None)  # Signal completion
                 except Exception as e:
                     chunk_queue.put(f"[ERROR]{str(e)}[/ERROR]")
@@ -540,16 +675,24 @@ async def chat_stream(request: ChatRequest):
             
             thread.join()
             
-            # Send sources at the end (document sources)
-            if sources:
+            # Check if the response indicates "not found" - if so, don't show sources
+            response_text = ''.join(full_response).lower()
+            answer_found = not any(phrase in response_text for phrase in [
+                "couldn't find", "could not find", "no information", "not found",
+                "don't have", "do not have", "unable to find", "cannot find"
+            ])
+            
+            # Send sources at the end ONLY if answer was actually found
+            if sources and answer_found:
                 yield f"data: [SOURCES]{','.join(sources)}[/SOURCES]\n\n"
             
-            # Send web sources
-            if web_sources:
+            # Send web sources ONLY if answer was found
+            if web_sources and answer_found:
                 yield f"data: [WEB_SOURCES]{json.dumps(web_sources)}[/WEB_SOURCES]\n\n"
             
-            # Send search mode
-            yield f"data: [SEARCH_MODE]{search_mode}[/SEARCH_MODE]\n\n"
+            # Send search mode ONLY if we actually used sources
+            final_mode = actual_search_mode if answer_found else "none"
+            yield f"data: [SEARCH_MODE]{final_mode}[/SEARCH_MODE]\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: [ERROR]{str(e)}[/ERROR]\n\n"
