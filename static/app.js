@@ -1483,26 +1483,118 @@ async function copyUserMessage(button) {
     }
 }
 
-// Edit user message - puts text in input and removes messages after it
+// Edit user message - inline editing with Cancel/Send buttons
 function editUserMessage(button) {
     const messageDiv = button.closest('.message');
-    const originalText = messageDiv.dataset.originalText;
+    const messageContent = messageDiv.querySelector('.message-content');
+    const originalText = messageDiv.dataset.originalText || messageContent?.innerText || '';
     
-    // Put text in input field
-    const chatInput = document.getElementById('chatInput');
-    if (chatInput) {
-        chatInput.value = originalText;
-        chatInput.focus();
+    if (!originalText || !messageContent) return;
+    
+    // Store original HTML for cancel
+    const originalHTML = messageContent.innerHTML;
+    
+    // Find the assistant response after this message to dim it
+    let assistantMsg = messageDiv.nextElementSibling;
+    while (assistantMsg && !assistantMsg.classList.contains('assistant')) {
+        assistantMsg = assistantMsg.nextElementSibling;
+    }
+    if (assistantMsg) {
+        assistantMsg.classList.add('old-response-dimmed');
     }
     
-    // Remove this message and all messages after it
-    let currentEl = messageDiv;
-    const toRemove = [];
-    while (currentEl) {
-        toRemove.push(currentEl);
-        currentEl = currentEl.nextElementSibling;
-    }
-    toRemove.forEach(el => el.remove());
+    // Hide action buttons during edit
+    const actionsDiv = messageDiv.querySelector('.message-actions');
+    if (actionsDiv) actionsDiv.style.display = 'none';
+    
+    // Create textarea with original content
+    const textarea = document.createElement('textarea');
+    textarea.className = 'edit-textarea';
+    textarea.value = originalText;
+    textarea.rows = Math.max(2, originalText.split('\n').length);
+    
+    // Create action buttons
+    const actions = document.createElement('div');
+    actions.className = 'edit-actions';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'edit-cancel-btn';
+    cancelBtn.innerText = 'Cancel';
+    
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'edit-send-btn';
+    sendBtn.innerText = 'Send';
+    
+    actions.appendChild(cancelBtn);
+    actions.appendChild(sendBtn);
+    
+    // Replace message content with edit UI
+    messageContent.innerHTML = '';
+    messageContent.appendChild(textarea);
+    messageContent.appendChild(actions);
+    
+    // Focus and place cursor at end
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    
+    // Auto-resize textarea
+    textarea.addEventListener('input', () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    });
+    textarea.dispatchEvent(new Event('input'));
+    
+    // Ctrl/Cmd+Enter to send
+    textarea.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            e.preventDefault();
+            sendBtn.click();
+        }
+        if (e.key === 'Escape') {
+            cancelBtn.click();
+        }
+    });
+    
+    // Cancel - restore original
+    cancelBtn.addEventListener('click', () => {
+        messageContent.innerHTML = originalHTML;
+        if (actionsDiv) actionsDiv.style.display = '';
+        if (assistantMsg) assistantMsg.classList.remove('old-response-dimmed');
+    });
+    
+    // Send - submit edited message
+    sendBtn.addEventListener('click', async () => {
+        const newText = textarea.value.trim();
+        if (!newText) return;
+        
+        // Update the message content
+        messageContent.innerHTML = `<p>${newText}</p>`;
+        messageDiv.dataset.originalText = newText;
+        if (actionsDiv) actionsDiv.style.display = '';
+        
+        // Store version history
+        if (!messageDiv.dataset.versions) {
+            messageDiv.dataset.versions = JSON.stringify([originalText]);
+        }
+        const versions = JSON.parse(messageDiv.dataset.versions);
+        versions.push(newText);
+        messageDiv.dataset.versions = JSON.stringify(versions);
+        messageDiv.dataset.currentVersion = versions.length - 1;
+        
+        // Remove old assistant response and regenerate
+        if (assistantMsg) {
+            assistantMsg.remove();
+        }
+        
+        // Trigger new response
+        const chatInput = document.getElementById('question-input');
+        if (chatInput) {
+            chatInput.value = newText;
+            const sendButton = document.getElementById('send-button');
+            if (sendButton) sendButton.click();
+            chatInput.value = '';
+        }
+    });
 }
 
 // Copy assistant message to clipboard
@@ -1536,9 +1628,10 @@ async function copyAssistantMessage(button) {
     }
 }
 
-// Regenerate response - find the user message before this and re-send
+// Regenerate response - dim old response, show loading, then replace
 async function regenerateResponse(button) {
     const assistantMsg = button.closest('.message');
+    const messageContent = assistantMsg.querySelector('.message-content');
     
     // Find the user message before this assistant message
     let userMsg = assistantMsg.previousElementSibling;
@@ -1547,22 +1640,112 @@ async function regenerateResponse(button) {
     }
     
     if (!userMsg || !userMsg.dataset.originalText) {
-        alert('Could not find the original question to regenerate.');
+        showToast('❌ Could not find the original question to regenerate.');
         return;
     }
     
     const originalQuestion = userMsg.dataset.originalText;
+    const originalHTML = messageContent ? messageContent.innerHTML : '';
     
-    // Remove the assistant message
-    assistantMsg.remove();
+    // Dim the old response - don't delete it
+    assistantMsg.classList.add('old-response-dimmed');
     
-    // Re-send the question
-    const chatInput = document.getElementById('chatInput');
-    if (chatInput) {
-        chatInput.value = originalQuestion;
-        // Trigger send
-        const sendBtn = document.getElementById('sendButton');
-        if (sendBtn) sendBtn.click();
+    // Show loading indicator
+    const loader = document.createElement('div');
+    loader.className = 'regenerate-loader';
+    loader.innerHTML = `
+        <div class="typing-indicator">
+            <span></span><span></span><span></span>
+        </div>
+    `;
+    assistantMsg.parentNode.insertBefore(loader, assistantMsg.nextSibling);
+    
+    // Hide action buttons during regeneration
+    const actionsDiv = assistantMsg.querySelector('.assistant-actions');
+    if (actionsDiv) actionsDiv.style.display = 'none';
+    
+    try {
+        // Build request body
+        const body = {
+            question: originalQuestion,
+            force_web_search: forceWebSearch
+        };
+        
+        const response = await fetch('/chat/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        
+        if (!response.ok) throw new Error('Failed to regenerate');
+        
+        // Stream the new response
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullResponse = '';
+        let sources = [];
+        let webSources = [];
+        let searchMode = 'documents_only';
+        
+        // Clear the old content and prepare for new
+        if (messageContent) {
+            messageContent.innerHTML = '<div class="streaming-content"><span class="typing-cursor"></span></div>';
+        }
+        assistantMsg.classList.remove('old-response-dimmed');
+        loader.remove();
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6);
+                    if (data === '[DONE]') continue;
+                    
+                    // Check for special markers
+                    if (data.startsWith('[SOURCES]')) {
+                        const sourcesMatch = data.match(/\[SOURCES\](.*?)\[\/SOURCES\]/);
+                        if (sourcesMatch) sources = sourcesMatch[1].split(',').filter(s => s.trim());
+                        continue;
+                    }
+                    if (data.startsWith('[WEB_SOURCES]')) {
+                        try {
+                            const wsMatch = data.match(/\[WEB_SOURCES\](.*?)\[\/WEB_SOURCES\]/);
+                            if (wsMatch) webSources = JSON.parse(wsMatch[1]);
+                        } catch (e) {}
+                        continue;
+                    }
+                    if (data.startsWith('[SEARCH_MODE]')) {
+                        const modeMatch = data.match(/\[SEARCH_MODE\](.*?)\[\/SEARCH_MODE\]/);
+                        if (modeMatch) searchMode = modeMatch[1];
+                        continue;
+                    }
+                    
+                    fullResponse += data;
+                    const streamingEl = messageContent?.querySelector('.streaming-content');
+                    if (streamingEl) {
+                        streamingEl.innerHTML = formatMessage(fullResponse) + '<span class="typing-cursor"></span>';
+                    }
+                }
+            }
+        }
+        
+        // Finalize the response
+        finalizeStreamingMessage(assistantMsg, fullResponse, sources, webSources, searchMode);
+        assistantMsg.dataset.responseContent = fullResponse;
+        if (actionsDiv) actionsDiv.style.display = '';
+        
+    } catch (error) {
+        // Restore original on failure
+        loader.remove();
+        assistantMsg.classList.remove('old-response-dimmed');
+        if (messageContent) messageContent.innerHTML = originalHTML;
+        if (actionsDiv) actionsDiv.style.display = '';
+        showToast('❌ Could not regenerate. Please try again.');
     }
 }
 

@@ -634,6 +634,122 @@ body {
     gap: 8px;
 }
 
+/* Edit mode styles */
+.edit-textarea {
+    width: 100%;
+    background: #f5f5f5;
+    border: 1.5px solid #d0d0d0;
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 15px;
+    font-family: inherit;
+    resize: none;
+    outline: none;
+    line-height: 1.6;
+    transition: border-color 0.2s ease;
+    min-height: 60px;
+}
+
+.edit-textarea:focus {
+    border-color: #888;
+}
+
+.edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.edit-cancel-btn {
+    padding: 8px 18px;
+    border-radius: 20px;
+    border: 1.5px solid #ccc;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.edit-cancel-btn:hover {
+    border-color: #999;
+    background: #f5f5f5;
+}
+
+.edit-send-btn {
+    padding: 8px 18px;
+    border-radius: 20px;
+    background: #111;
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.edit-send-btn:hover {
+    background: #333;
+}
+
+/* Dimmed response during edit/regenerate */
+.old-response-dimmed {
+    opacity: 0.3;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+/* Regenerate loader */
+.regenerate-loader {
+    padding: 16px 0;
+}
+
+.typing-indicator {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.typing-indicator span {
+    width: 8px;
+    height: 8px;
+    background: var(--primary-blue);
+    border-radius: 50%;
+    animation: typing 1.4s infinite ease-in-out both;
+}
+
+.typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+.typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0s; }
+
+@keyframes typing {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+    40% { transform: scale(1); opacity: 1; }
+}
+
+/* Version counter */
+.version-counter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    opacity: 0.4;
+    margin-top: 4px;
+}
+
+.version-counter button {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 12px;
+    color: inherit;
+}
+
+.version-counter button:hover {
+    opacity: 0.8;
+}
+
 .message-content p { margin-bottom: 8px; }
 .message-content p:last-child { margin-bottom: 0; }
 
