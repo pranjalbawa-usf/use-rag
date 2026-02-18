@@ -540,105 +540,98 @@ body {
     gap: 20px;
 }
 
+/* Clean chat layout - no bubbles, no boxes */
 .message {
     display: flex;
-    gap: 12px;
-    max-width: 75%;
+    flex-direction: column;
+    max-width: 85%;
     animation: fadeIn 0.3s ease;
+    margin-bottom: 24px;
 }
 
 .message.user {
     align-self: flex-end;
-    flex-direction: row-reverse;
-    position: relative;
+    align-items: flex-end;
 }
 
-/* User message action buttons */
-.message-actions {
-    display: flex;
-    gap: 4px;
-    opacity: 0;
-    transition: opacity 0.2s;
+.message.assistant {
+    align-self: flex-start;
     align-items: flex-start;
-    margin-top: 4px;
 }
 
-.message.user:hover .message-actions {
+/* Hide avatars completely */
+.message-avatar {
+    display: none;
+}
+
+/* Clean message content - no bubbles */
+.message-content {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text-dark);
+}
+
+.message.assistant .message-content {
+    background: transparent !important;
+    border: none !important;
+    color: var(--text-dark);
+}
+
+.message.user .message-content {
+    background: transparent !important;
+    border: none !important;
+    color: var(--text-dark);
+    text-align: right;
+}
+
+/* Action buttons - minimal, icon-only */
+.message-actions,
+.assistant-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+    opacity: 0.3;
+    transition: opacity 0.2s ease;
+    border: none !important;
+    padding: 0 !important;
+}
+
+.message:hover .message-actions,
+.message:hover .assistant-actions {
     opacity: 1;
 }
 
 .msg-action-btn {
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: rgba(255, 255, 255, 0.9);
-    border-radius: 6px;
+    width: auto;
+    height: auto;
+    padding: 4px;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 0;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--text-gray);
-    transition: all 0.2s;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: color 0.2s;
 }
 
 .msg-action-btn:hover {
-    background: var(--bg-white);
+    background: transparent !important;
     color: var(--primary-blue);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-}
-
-/* Assistant message action buttons */
-.assistant-actions {
-    display: flex;
-    gap: 4px;
-    margin-top: 12px;
-    padding-top: 8px;
-    border-top: 1px solid var(--border-light);
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.message.assistant:hover .assistant-actions {
-    opacity: 1;
+    box-shadow: none !important;
 }
 
 /* Chat header actions */
 .chat-header-actions {
     display: flex;
     gap: 8px;
-}
-
-.message-avatar {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    background: var(--primary-blue-light);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--primary-blue);
-}
-
-.message-content {
-    padding: 14px 18px;
-    border-radius: 12px;
-    font-size: 14px;
-    line-height: 1.5;
-}
-
-.message.assistant .message-content {
-    background: var(--bg-gray);
-    border: 1px solid var(--border-light);
-    border-radius: 12px 12px 12px 0;
-    color: var(--text-dark);
-}
-
-.message.user .message-content {
-    background: var(--primary-blue);
-    color: white;
-    border-radius: 12px 12px 0 12px;
 }
 
 .message-content p { margin-bottom: 8px; }
@@ -654,12 +647,12 @@ body {
 }
 
 .message-content .response-header {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--primary-blue);
     margin: 16px 0 8px 0;
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--border-light);
+    padding-bottom: 0;
+    border-bottom: none;
 }
 
 .message-content .response-header:first-child {
