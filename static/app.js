@@ -1566,55 +1566,150 @@ async function regenerateResponse(button) {
     }
 }
 
+// Toast notification - clean, minimal feedback
+function showToast(message) {
+    // Remove any existing toast
+    const existingToast = document.querySelector('.share-toast');
+    if (existingToast) existingToast.remove();
+    
+    const toast = document.createElement('div');
+    toast.className = 'share-toast';
+    toast.innerText = message;
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1a1a1a;
+        color: #fff;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-size: 14px;
+        z-index: 9999;
+        opacity: 1;
+        transition: opacity 0.5s ease;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 500);
+    }, 2500);
+}
+
+// Legacy copy fallback for older browsers
+function legacyCopy(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+        document.execCommand('copy');
+        showToast('✅ Copied to clipboard!');
+    } catch (err) {
+        showToast('❌ Could not copy. Please select and copy manually.');
+    }
+    document.body.removeChild(textarea);
+}
+
+// Fallback share - copy to clipboard
+function fallbackShare(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+            .then(() => showToast('✅ Copied to clipboard!'))
+            .catch(() => legacyCopy(text));
+    } else {
+        legacyCopy(text);
+    }
+}
+
+// Show share dropdown menu
+function showShareMenu(button, content) {
+    // Remove any existing menu
+    const existingMenu = document.querySelector('.share-menu');
+    if (existingMenu) existingMenu.remove();
+    
+    const menu = document.createElement('div');
+    menu.className = 'share-menu';
+    menu.style.cssText = `
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        padding: 8px 0;
+        min-width: 160px;
+        z-index: 1000;
+        margin-bottom: 8px;
+    `;
+    
+    const options = [
+        { icon: '📋', label: 'Copy Text', action: () => fallbackShare(content) },
+        { icon: '🐦', label: 'Share on X', action: () => {
+            const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(content.substring(0, 280))}`;
+            window.open(url, '_blank', 'width=550,height=420');
+        }},
+        { icon: '💼', label: 'Share on LinkedIn', action: () => {
+            const url = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}`;
+            window.open(url, '_blank', 'width=550,height=420');
+        }},
+    ];
+    
+    options.forEach(opt => {
+        const item = document.createElement('div');
+        item.style.cssText = `
+            padding: 8px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #333;
+            transition: background 0.2s;
+        `;
+        item.innerHTML = `<span>${opt.icon}</span><span>${opt.label}</span>`;
+        item.addEventListener('mouseenter', () => item.style.background = '#f5f5f5');
+        item.addEventListener('mouseleave', () => item.style.background = 'transparent');
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            opt.action();
+            menu.remove();
+        });
+        menu.appendChild(item);
+    });
+    
+    // Position relative to button
+    button.style.position = 'relative';
+    button.appendChild(menu);
+    
+    // Close menu when clicking outside
+    const closeMenu = (e) => {
+        if (!menu.contains(e.target) && e.target !== button) {
+            menu.remove();
+            document.removeEventListener('click', closeMenu);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+}
+
 // Share a single message
 async function shareMessage(button) {
     const messageDiv = button.closest('.message');
     const content = messageDiv.dataset.responseContent || messageDiv.querySelector('.message-content')?.innerText || '';
     
-    // Try native share API first
-    if (navigator.share) {
-        try {
-            await navigator.share({
-                title: 'Shared from USF RAG',
-                text: content
-            });
-            return;
-        } catch (e) {
-            // User cancelled or error, fall through to copy
-        }
-    }
-    
-    // Fallback: copy to clipboard with share text
-    const shareText = `📄 Shared from USF RAG:\n\n${content}`;
-    try {
-        await navigator.clipboard.writeText(shareText);
-        button.innerHTML = `
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20 6 9 17 4 12"></polyline>
-            </svg>
-        `;
-        setTimeout(() => {
-            button.innerHTML = `
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="18" cy="5" r="3"></circle>
-                    <circle cx="6" cy="12" r="3"></circle>
-                    <circle cx="18" cy="19" r="3"></circle>
-                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-                </svg>
-            `;
-        }, 1500);
-        alert('Response copied to clipboard for sharing!');
-    } catch (e) {
-        alert('Could not share. Please copy manually.');
-    }
+    // Show share menu with options
+    showShareMenu(button, content);
 }
 
 // Share entire chat
 async function shareChat() {
     const messages = document.querySelectorAll('#chat-messages .message');
     if (messages.length === 0) {
-        alert('No messages to share.');
+        showToast('No messages to share.');
         return;
     }
     
@@ -1629,7 +1724,7 @@ async function shareChat() {
     });
     
     if (realMessages.length === 0) {
-        alert('Start a conversation first, then share it!');
+        showToast('💬 Start a conversation first, then share it!');
         return;
     }
     
@@ -1645,7 +1740,7 @@ async function shareChat() {
         chatText += `${role}:\n${content}\n\n`;
     });
     
-    // Try native share API
+    // Try native share API first
     if (navigator.share) {
         try {
             await navigator.share({
@@ -1653,18 +1748,15 @@ async function shareChat() {
                 text: chatText
             });
             return;
-        } catch (e) {
-            // Fall through to copy
+        } catch (error) {
+            // If user cancelled, do nothing
+            if (error.name === 'AbortError') return;
+            // Otherwise fall through to fallback
         }
     }
     
-    // Fallback: copy to clipboard
-    try {
-        await navigator.clipboard.writeText(chatText);
-        alert('Chat copied to clipboard for sharing!');
-    } catch (e) {
-        alert('Could not share. Please copy manually.');
-    }
+    // Fallback: copy to clipboard with proper chain
+    fallbackShare(chatText);
 }
 
 // Filter out empty, null, undefined, or placeholder values from JSON
