@@ -1612,15 +1612,30 @@ async function shareMessage(button) {
 
 // Share entire chat
 async function shareChat() {
-    const messages = document.querySelectorAll('#chatMessages .message');
+    const messages = document.querySelectorAll('#chat-messages .message');
     if (messages.length === 0) {
         alert('No messages to share.');
         return;
     }
     
+    // Filter out welcome message if it's the only one (no real conversation yet)
+    const realMessages = Array.from(messages).filter(msg => {
+        // Skip welcome message if no user messages exist
+        if (msg.id === 'welcome-message') {
+            const hasUserMessages = document.querySelector('#chat-messages .message.user');
+            return hasUserMessages !== null;
+        }
+        return true;
+    });
+    
+    if (realMessages.length === 0) {
+        alert('Start a conversation first, then share it!');
+        return;
+    }
+    
     let chatText = '📄 USF RAG Chat Export\n' + '='.repeat(30) + '\n\n';
     
-    messages.forEach(msg => {
+    realMessages.forEach(msg => {
         const isUser = msg.classList.contains('user');
         const role = isUser ? '👤 You' : '🤖 Assistant';
         const content = isUser 
